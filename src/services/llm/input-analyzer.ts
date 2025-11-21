@@ -83,9 +83,9 @@ Now analyze: "${brandInput}"
       // Extract JSON from response (Claude might wrap it in markdown)
       let jsonStr = response.trim();
       if (jsonStr.startsWith('```json')) {
-        jsonStr = jsonStr.replace(/```json\n?/g, '').replace(/```\n?/g, '');
+        jsonStr = jsonStr.replaceAll(/```json\n?/g, '').replaceAll(/```\n?/g, '');
       } else if (jsonStr.startsWith('```')) {
-        jsonStr = jsonStr.replace(/```\n?/g, '');
+        jsonStr = jsonStr.replaceAll(/```\n?/g, '');
       }
 
       const analysis = JSON.parse(jsonStr);

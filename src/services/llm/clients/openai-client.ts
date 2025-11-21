@@ -55,7 +55,7 @@ export async function callGPT5(
  */
 export async function callGPT5WithStructuredOutput<T>(
   prompt: string,
-  schema: Record<string, unknown>,
+  _schema: Record<string, unknown>,
   systemPrompt?: string
 ): Promise<T> {
   try {

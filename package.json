@@ -2,6 +2,7 @@
   "name": "searchbrand-challenge",
   "version": "1.0.0",
   "description": "Herramienta automatizada de inteligencia competitiva que identifica competidores relevantes de una marca utilizando web scraping, análisis de datos y Large Language Models (LLMs).",
+  "type": "module",
   "main": "dist/server.js",
   "scripts": {
     "dev": "tsx watch src/server.ts",

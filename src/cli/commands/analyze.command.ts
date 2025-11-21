@@ -30,9 +30,10 @@ function displayAnalysisResults(analysis: InputAnalysis, selectedCategory?: stri
   );
 
   console.log('\n' + chalk.bold('🏭 Industrias Identificadas:'));
-  analysis.inferredIndustries.forEach((industry, index) => {
+  for (let index = 0; index < analysis.inferredIndustries.length; index++) {
+    const industry = analysis.inferredIndustries[index];
     console.log(`  ${chalk.gray(index + 1 + '.')} ${chalk.white(industry)}`);
-  });
+  }
 
   if (analysis.isAmbiguous) {
     console.log('\n' + chalk.yellow.bold('⚠️  MARCA AMBIGUA DETECTADA'));
@@ -48,9 +49,10 @@ function displayAnalysisResults(analysis: InputAnalysis, selectedCategory?: stri
       console.log(`  ${chalk.green('→')} ${chalk.white.bold(selectedCategory)}`);
     } else if (analysis.suggestedCategories) {
       console.log('\n' + chalk.bold('💡 Categorías Sugeridas:'));
-      analysis.suggestedCategories.forEach((category, index) => {
+      for (let index = 0; index < analysis.suggestedCategories.length; index++) {
+        const category = analysis.suggestedCategories[index];
         console.log(`  ${chalk.gray(index + 1 + '.')} ${chalk.white(category)}`);
-      });
+      }
     }
   } else {
     console.log('\n' + chalk.green.bold('✅ MARCA CLARA'));
@@ -89,9 +91,10 @@ export async function analyzeCommand(): Promise<void> {
       console.log(
         '\n' + chalk.yellow.bold('⚠️  Se detectaron múltiples categorías posibles:\n')
       );
-      analysis.suggestedCategories.forEach((category, index) => {
+      for (let index = 0; index < analysis.suggestedCategories.length; index++) {
+        const category = analysis.suggestedCategories[index];
         console.log(`  ${chalk.white(index + 1)}. ${chalk.cyan(category)}`);
-      });
+      }
       console.log('');
 
       selectedCategory = await promptCategorySelection(analysis.suggestedCategories);
