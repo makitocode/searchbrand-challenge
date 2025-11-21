@@ -1,0 +1,44 @@
+{
+  "name": "searchbrand-challenge",
+  "version": "1.0.0",
+  "description": "Herramienta automatizada de inteligencia competitiva que identifica competidores relevantes de una marca utilizando web scraping, análisis de datos y Large Language Models (LLMs).",
+  "main": "dist/server.js",
+  "scripts": {
+    "dev": "tsx watch src/server.ts",
+    "cli": "tsx src/cli.ts",
+    "build": "tsc",
+    "start": "node dist/server.js",
+    "lint": "eslint src/**/*.ts",
+    "format": "prettier --write src/**/*.ts",
+    "type-check": "tsc --noEmit"
+  },
+  "keywords": [
+    "competitor-intelligence",
+    "brand-analysis",
+    "llm",
+    "typescript"
+  ],
+  "author": "Miguel González",
+  "license": "ISC",
+  "dependencies": {
+    "express": "^4.18.2",
+    "dotenv": "^16.4.5",
+    "winston": "^3.11.0",
+    "@anthropic-ai/sdk": "^0.30.0",
+    "openai": "^4.77.0",
+    "inquirer": "^9.2.12",
+    "chalk": "^5.3.0",
+    "ora": "^8.0.1"
+  },
+  "devDependencies": {
+    "@types/express": "^4.17.21",
+    "@types/node": "^20.10.4",
+    "@types/inquirer": "^9.0.7",
+    "@typescript-eslint/eslint-plugin": "^6.15.0",
+    "@typescript-eslint/parser": "^6.15.0",
+    "eslint": "^8.56.0",
+    "prettier": "^3.1.1",
+    "tsx": "^4.7.0",
+    "typescript": "^5.3.3"
+  }
+}
