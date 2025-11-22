@@ -6,9 +6,9 @@
  */
 
 import chalk from 'chalk';
-import { analyzeCommand } from './cli/commands/analyze.command';
-import { promptContinue } from './cli/prompts/interactive-prompts';
-import { logger } from './utils/logger';
+import { analyzeCommand } from './cli/commands/analyze.command.js';
+import { promptContinue } from './cli/prompts/interactive-prompts.js';
+import { logger } from './utils/logger.js';
 
 /**
  * Display welcome banner
@@ -22,8 +22,8 @@ function displayWelcomeBanner(): void {
   console.log(chalk.gray('  Powered by Claude AI + GPT-5'));
   console.log(chalk.cyan('═'.repeat(60)) + '\n');
   console.log(
-    chalk.yellow('  📍 FASE 1:') +
-      chalk.white(' Análisis de Input con IA') +
+    chalk.yellow('  📍 FASE 1 + 2:') +
+      chalk.white(' Análisis con IA + Wikipedia + Tipo de Marca') +
       '\n'
   );
 }

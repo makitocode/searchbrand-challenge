@@ -128,6 +128,12 @@ export interface GoogleSearchResult {
 }
 
 // ============================================
+// Brand Classification Types (Multi-Source)
+// ============================================
+
+export * from './brand-classification.types.js';
+
+// ============================================
 // Database Types
 // ============================================
 

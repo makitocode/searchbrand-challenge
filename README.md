@@ -43,8 +43,36 @@ Marcas nicho, locales o startups muy nuevas con poca presencia digital (ej: pana
 Esta solución va más allá del scraping tradicional al integrar **Anthropic Claude** y **OpenAI GPT-5** en momentos clave del análisis:
 
 1. **Análisis de Input** (Claude): Comprensión semántica de la marca, detección de ambigüedad
-2. **Enriquecimiento de Datos** (GPT-5): Extracción inteligente de insights de datos scraped
-3. **Análisis Competitivo** (GPT-5): Evaluación con structured outputs y scoring transparente
+2. **Clasificación de Marca**: Multi-source approach con 5 fuentes de datos + LLM como validador
+3. **Enriquecimiento de Datos** (GPT-5): Extracción inteligente de insights de datos scraped
+4. **Análisis Competitivo** (GPT-5): Evaluación con structured outputs y scoring transparente
+
+### Clasificación de Marca: Global vs Nicho
+
+El sistema clasifica cada marca en dos categorías usando un enfoque multi-fuente:
+
+**GLOBAL**: Reconocimiento y operación en múltiples continentes (3+)
+- Opera en 10+ países
+- Wikipedia en 3+ idiomas
+- Presencia en medios internacionales (BBC, CNN, Reuters)
+- Millones de seguidores en redes sociales
+- Interés distribuido en 3+ continentes (Google Trends)
+
+**NICHO**: Todo lo que NO es global (incluye nacional, regional, local, especializado)
+
+**Fuentes de Datos (5)**:
+1. Wikipedia (25%): Idiomas disponibles, categorías, notabilidad
+2. Google Search (20%): Presencia web multi-idioma, medios internacionales
+3. Google Trends (20%): Distribución geográfica de interés
+4. Sitio Web Oficial (15%): Idiomas, selector de país
+5. **LLM Directo (20%)**: Conocimiento pre-entrenado del LLM sobre la marca
+
+El LLM realiza un análisis final que:
+- Valida la clasificación basada en todas las evidencias
+- Actúa como tie-breaker en casos ambiguos (score 45-55)
+- Genera justificación en lenguaje natural
+
+Ver [BRAND-CLASSIFICATION-STRATEGY.md](BRAND-CLASSIFICATION-STRATEGY.md) para detalles completos.
 
 ## Sistema de Scoring Transparente
 
