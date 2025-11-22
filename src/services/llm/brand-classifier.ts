@@ -13,36 +13,38 @@ export class BrandClassifier {
    * This leverages the LLM's pre-trained knowledge
    */
   async classifyBrand(brandName: string): Promise<LLMBrandKnowledge> {
-    const systemPrompt = `You are a brand classification expert. Your task is to determine if a brand is globally known based on your knowledge.
+    const systemPrompt = `Eres un experto en clasificación de marcas. Tu tarea es determinar si una marca es conocida globalmente basándote en tu conocimiento.
 
-Be HONEST about what you know:
-- If you clearly know the brand and it operates globally → classification: "global"
-- If you know it's a local/regional brand → classification: "local"
-- If you're uncertain or don't know → classification: "unknown"
+Sé HONESTO sobre lo que sabes:
+- Si conoces claramente la marca y opera globalmente → classification: "global"
+- Si sabes que es una marca local/regional → classification: "local"
+- Si no estás seguro o no la conoces → classification: "unknown"
 
-For GLOBAL brands, you should know:
-- They operate in 10+ countries
-- Presence in 3+ continents
-- International recognition
+Para marcas GLOBALES, deberías saber:
+- Operan en 10+ países
+- Presencia en 3+ continentes
+- Reconocimiento internacional
 
-Respond ONLY with valid JSON, no markdown.`;
+Responde SOLO con JSON válido, sin markdown.`;
 
-    const prompt = `Do you know the brand "${brandName}"?
+    const prompt = `¿Conoces la marca "${brandName}"?
 
-Respond in JSON format:
+Responde en formato JSON:
 {
   "knows_brand": true/false,
   "classification": "global" | "local" | "unknown",
   "confidence": 0-100,
-  "known_countries": ["country1", "country2", ...],
-  "continental_presence": ["continent1", "continent2", ...],
-  "reasoning": "brief explanation"
+  "known_countries": ["país1", "país2", ...],
+  "continental_presence": ["continente1", "continente2", ...],
+  "primary_country": "país principal de operación (código ISO de 2 letras)" o null,
+  "reasoning": "breve explicación"
 }
 
-Examples:
-- Spotify: knows_brand=true, classification="global", confidence=95, known_countries=["US","UK","BR","MX","DE",...], continental_presence=["North America","South America","Europe","Asia","Africa","Oceania"]
-- Herbívoro (Colombian restaurant): knows_brand=false, classification="unknown", confidence=20
-- Atlético Nacional (Colombian soccer team): knows_brand=true, classification="local", confidence=80, known_countries=["Colombia"], continental_presence=["South America"]`;
+Ejemplos:
+- Spotify: knows_brand=true, classification="global", confidence=95, known_countries=["US","UK","BR","MX","DE",...], continental_presence=["North America","South America","Europe","Asia","Africa","Oceania"], primary_country="SE"
+- Herbívoro (restaurante colombiano): knows_brand=false, classification="unknown", confidence=20, known_countries=[], continental_presence=[], primary_country=null
+- Atlético Nacional (equipo de fútbol colombiano): knows_brand=true, classification="local", confidence=80, known_countries=["CO"], continental_presence=["South America"], primary_country="CO"
+- Cafe Soca (café colombiano): knows_brand=true, classification="local", confidence=75, known_countries=["CO"], continental_presence=["South America"], primary_country="CO"`;
 
     try {
       logger.info(`LLM Direct classification for: ${brandName}`);
@@ -72,6 +74,7 @@ Examples:
         confidence: 0,
         known_countries: [],
         continental_presence: [],
+        primary_country: null,
         reasoning: 'Classification failed due to LLM error'
       };
     }

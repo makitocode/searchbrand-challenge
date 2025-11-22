@@ -12,6 +12,7 @@ export interface LLMBrandKnowledge {
   confidence: number; // 0-100
   known_countries: string[];
   continental_presence: string[];
+  primary_country?: string | null; // ISO 2-letter code
   reasoning: string;
 }
 
