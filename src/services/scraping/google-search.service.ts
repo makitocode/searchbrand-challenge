@@ -338,6 +338,18 @@ export class GoogleSearchService {
           inferredLocation = 'Mexico';
         }
       }
+
+      // FALLBACK: If still no location detected for niche brand, use LLM to infer from brand name + industry
+      if (!inferredLocation && !location) {
+        logger.info('No location detected - using LLM to infer from brand name and industry');
+        const fallbackLocation = await this.inferLocationFromBrandContext(brandName, industry);
+        if (fallbackLocation) {
+          inferredLocation = fallbackLocation.name;
+          countryCode = fallbackLocation.code;
+          language = fallbackLocation.lang;
+          logger.info(`Fallback location detected: ${fallbackLocation.name}`);
+        }
+      }
       } // Close the else block for niche brand location detection
 
       const finalLocation = location || inferredLocation;
@@ -758,34 +770,27 @@ Clasificación:
 
       logger.debug(`Filtering ${candidates.length} candidates for ${brandName}`);
 
-      const prompt = `Estás validando competidores potenciales para "${brandName}". Tu trabajo es SOLO excluir candidatos que sean CLARAMENTE inválidos.
+      const prompt = `Valida esta lista de competidores potenciales para "${brandName}":
 
 ${brandContext}
 
-Candidatos encontrados:
+Candidatos:
 ${candidatesList}
 
-SOLO EXCLUYE si el candidato es CLARAMENTE uno de estos:
-❌ La marca analizada "${brandName}" o variación exacta del nombre
-❌ Plataformas de reservas: Expedia, Booking.com, Hotels.com, Trivago, Kayak, Despegar, Airbnb
-❌ Apps de delivery/agregadores: Uber Eats, Rappi, iFood, PedidosYa, Domicilios.com
-❌ Directorios: TripAdvisor, OpenTable, Google Maps, Yelp
-❌ Palabras genéricas: "Restaurante", "Cafetería", "Hotel", "Supermercado", "Tienda" (sin nombre propio)
-❌ Ubicaciones geográficas: "Antioquia", "Huila", "Bogotá", "Medellín"
+SOLO EXCLUYE si el candidato es CLARAMENTE:
+- La misma marca "${brandName}" (o variaciones como "${brandName.replace(/^(restaurante|café|hotel|supermercado)\s+/i, '')}")
+- Una plataforma (Expedia, Booking, Uber Eats, Rappi, TripAdvisor)
+- Una palabra genérica sin nombre propio ("Restaurant", "Café", "Hotel")
+${brandType === 'niche' && location ? `- Una marca de OTRO PAÍS (debe ser de ${location})` : ''}
 
-INCLUYE TODO LO DEMÁS que parezca ser una marca o negocio real:
-✅ Nombres propios de negocios (ej: "Café Oma", "Amor Perfecto", "Coratiendas")
-✅ Marcas que compiten en ${industry}
-✅ ${brandType === 'global' ? 'Competidores globales o internacionales' : `Negocios en ${location || 'la región'}`}
-
-Retorna SOLO JSON válido:
+Para cada competidor VÁLIDO, retorna:
 {
   "competitors": [
-    {"name": "Nombre Exacto", "description": "Qué tipo de negocio es"}
+    {"name": "Nombre", "description": "Qué hace"}
   ]
 }
 
-IMPORTANTE: Si tienes duda, INCLÚYELO. Es mejor incluir un competidor válido que excluirlo por error.`;
+Sé PERMISIVO - incluye todos los que parezcan competidores reales de ${location || 'la región'}. Solo excluye lo obviamente inválido.`;
 
       const response = await callClaude(prompt, systemPrompt);
 
@@ -814,11 +819,21 @@ IMPORTANTE: Si tienes duda, INCLÚYELO. Es mejor incluir un competidor válido q
         'panadería', 'bakery', 'cocina', 'kitchen'
       ];
 
+      // Extract the core brand name (remove common prefixes)
+      const coreBrandName = brandName.replace(/^(restaurante|café|hotel|supermercado|tienda)\s+/i, '').toLowerCase().trim();
+
       for (const llmComp of result.competitors || []) {
         // Skip if it's a generic word without a proper name
         const nameLower = llmComp.name.toLowerCase().trim();
         if (genericWords.includes(nameLower)) {
           logger.debug(`Skipping generic word: ${llmComp.name}`);
+          continue;
+        }
+
+        // Skip if it matches the brand name (exact or core name)
+        const compNameCore = nameLower.replace(/^(restaurante|café|hotel|supermercado|tienda)\s+/i, '').trim();
+        if (nameLower === brandName.toLowerCase() || compNameCore === coreBrandName) {
+          logger.debug(`Skipping same brand: ${llmComp.name}`);
           continue;
         }
 
@@ -844,6 +859,88 @@ IMPORTANTE: Si tienes duda, INCLÚYELO. Es mejor incluir un competidor válido q
   }
 
   /**
+   * Infer location from brand name and industry context using LLM
+   * Used as a fallback when other location detection methods fail
+   */
+  private async inferLocationFromBrandContext(
+    brandName: string,
+    industry: string
+  ): Promise<{ name: string; code: string; lang: string } | null> {
+    try {
+      const systemPrompt = `Eres un analista geográfico. Debes inferir el país de origen de una marca basándote en su nombre e industria. Responde SOLO con JSON válido.`;
+
+      const prompt = `Analiza la marca "${brandName}" en la industria de ${industry}.
+
+¿De qué país es esta marca? Considera:
+- Nombres con referencias geográficas
+- Palabras en idiomas específicos
+- Convenciones de nombres locales
+- Contexto de la industria
+
+Responde en formato JSON:
+{
+  "country_code": "código ISO de 2 letras" o null,
+  "country_name": "nombre del país en español" o null,
+  "confidence": 0-100,
+  "reasoning": "por qué crees que es de este país"
+}
+
+Ejemplos:
+- "Restaurante Herbívoro" → {"country_code": "CO", "country_name": "Colombia", "confidence": 75, "reasoning": "Herbívoro es un restaurante vegano conocido en Bogotá"}
+- "Café Quindío" → {"country_code": "CO", "country_name": "Colombia", "confidence": 90, "reasoning": "Quindío es un departamento colombiano famoso por el café"}
+- "Supermercado Olímpica" → {"country_code": "CO", "country_name": "Colombia", "confidence": 85, "reasoning": "Olímpica es una cadena de supermercados colombiana"}
+- "Panadería San Juan" → {"country_code": null, "country_name": null, "confidence": 20, "reasoning": "Nombre genérico que podría ser de cualquier país de habla hispana"}
+
+IMPORTANTE: Solo retorna un país si tienes confianza >= 60. Si no estás seguro, retorna null.`;
+
+      const response = await callClaude(prompt, systemPrompt);
+
+      // Extract JSON
+      let jsonStr = response.trim();
+      jsonStr = jsonStr.replace(/```json\s*/g, '').replace(/```\s*/g, '');
+
+      const jsonStart = jsonStr.indexOf('{');
+      const jsonEnd = jsonStr.lastIndexOf('}');
+      if (jsonStart !== -1 && jsonEnd !== -1) {
+        jsonStr = jsonStr.substring(jsonStart, jsonEnd + 1);
+      }
+
+      const result: {
+        country_code: string | null;
+        country_name: string | null;
+        confidence: number;
+        reasoning: string;
+      } = JSON.parse(jsonStr);
+
+      logger.debug(`Location inference: ${result.country_name} (${result.confidence}% confidence) - ${result.reasoning}`);
+
+      // Only use if confidence is high enough
+      if (result.country_code && result.confidence >= 60) {
+        const countryMap: Record<string, { name: string; code: string; lang: string }> = {
+          CO: { name: 'Colombia', code: 'co', lang: 'es' },
+          CL: { name: 'Chile', code: 'cl', lang: 'es' },
+          AR: { name: 'Argentina', code: 'ar', lang: 'es' },
+          MX: { name: 'Mexico', code: 'mx', lang: 'es' },
+          BR: { name: 'Brasil', code: 'br', lang: 'pt' },
+          US: { name: 'United States', code: 'us', lang: 'en' },
+          GB: { name: 'United Kingdom', code: 'gb', lang: 'en' },
+          ES: { name: 'España', code: 'es', lang: 'es' },
+        };
+
+        const country = countryMap[result.country_code.toUpperCase()];
+        if (country) {
+          return country;
+        }
+      }
+
+      return null;
+    } catch (error) {
+      logger.warn('Location inference failed:', error);
+      return null;
+    }
+  }
+
+  /**
    * Get competitor suggestions from LLM based on classification data
    */
   private async getLLMCompetitorSuggestions(
@@ -860,7 +957,10 @@ IMPORTANTE: Si tienes duda, INCLÚYELO. Es mejor incluir un competidor válido q
       if (brandType === 'global') {
         strategyPrompt = `Sugiere 5-8 competidores GLOBALES principales para "${brandName}" en la industria de ${industry}.`;
       } else {
-        strategyPrompt = `Sugiere 5-8 competidores LOCALES/REGIONALES para "${brandName}" en la industria de ${industry}${location ? ` en ${location}` : ''}.`;
+        const locationStr = location || 'la región';
+        strategyPrompt = `Sugiere 5-8 competidores que operan ESPECÍFICAMENTE en ${locationStr} para "${brandName}" en la industria de ${industry}.
+
+CRÍTICO: Los competidores DEBEN ser negocios que operan en ${locationStr}. NO sugieras marcas de otros países o regiones.`;
       }
 
       const dataContext = classificationData
