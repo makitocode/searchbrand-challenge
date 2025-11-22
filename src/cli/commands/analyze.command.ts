@@ -83,11 +83,12 @@ export async function analyzeCommand(): Promise<void> {
       wikipedia: wikipediaData.exists ? wikipediaData : undefined,
       llmDirect: llmKnowledge,
       googleSearch:
-        serpApiData.languages_detected.length > 0 || serpApiData.international_media
+        serpApiData.languages_detected.length > 0 || serpApiData.international_media || serpApiData.detected_location
           ? {
               languages_detected: serpApiData.languages_detected,
               domains: serpApiData.domains,
               international_media: serpApiData.international_media,
+              detected_location: serpApiData.detected_location,
             }
           : undefined,
       googleTrends: serpApiData.trendsData.continents.length > 0 ? serpApiData.trendsData : undefined,

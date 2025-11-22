@@ -39,11 +39,13 @@ export class GoogleSearchService {
 
       const organicResults = response.organic_results || [];
       const knowledgeGraph = response.knowledge_graph;
+      const localResults = response.local_results || [];
 
       // Detect languages from results
       const languages = new Set<string>();
       const domains = new Set<string>();
       let internationalMedia = false;
+      let detectedLocation: { country: string; city?: string; region?: string; address?: string } | undefined;
 
       // International media domains
       const mediaDomains = [
@@ -120,11 +122,43 @@ export class GoogleSearchService {
         languages.add('en');
       }
 
+      // Extract location from local results (Google My Business / Maps)
+      if (localResults && localResults.length > 0) {
+        const firstLocal = localResults[0];
+        if (firstLocal.address) {
+          detectedLocation = this.parseAddress(firstLocal.address);
+          logger.debug(`Location detected from local results: ${JSON.stringify(detectedLocation)}`);
+        }
+      }
+
+      // If no local results, try to extract from organic results snippets
+      if (!detectedLocation) {
+        for (const result of organicResults.slice(0, 5)) {
+          const snippet = result.snippet || '';
+          const title = result.title || '';
+          const text = `${title} ${snippet}`;
+
+          // Look for address patterns in snippets
+          const locationMatch = this.extractLocationFromText(text);
+          if (locationMatch) {
+            detectedLocation = locationMatch;
+            logger.debug(`Location detected from snippet: ${JSON.stringify(detectedLocation)}`);
+            break;
+          }
+        }
+      }
+
       // Check knowledge graph for additional signals
       if (knowledgeGraph) {
         // If brand has a knowledge graph, it's likely well-known
         if (knowledgeGraph.type?.includes('Corporation') || knowledgeGraph.type?.includes('Company')) {
           internationalMedia = true;
+        }
+
+        // Extract location from knowledge graph if available
+        if (!detectedLocation && knowledgeGraph.address) {
+          detectedLocation = this.parseAddress(knowledgeGraph.address);
+          logger.debug(`Location detected from knowledge graph: ${JSON.stringify(detectedLocation)}`);
         }
       }
 
@@ -135,6 +169,7 @@ export class GoogleSearchService {
         languages_detected: Array.from(languages),
         domains: Array.from(domains),
         international_media: internationalMedia,
+        detected_location: detectedLocation,
         trendsData,
       };
 
@@ -253,7 +288,29 @@ export class GoogleSearchService {
         countryCode = 'us'; // Use US as default for global search
         language = 'en'; // Use English for global search
       } else {
-        // PRIORITY 1: Check LLM's primary_country (most reliable) - ONLY for niche brands
+        // PRIORITY 0: Check Google Search detected location (most reliable - from Google Maps/snippets)
+        if (!inferredLocation && classificationData?.googleSearch?.detected_location) {
+          const googleLoc = classificationData.googleSearch.detected_location;
+          const countryMap: Record<string, { name: string; code: string; lang: string }> = {
+            'Colombia': { name: 'Colombia', code: 'co', lang: 'es' },
+            'Chile': { name: 'Chile', code: 'cl', lang: 'es' },
+            'Argentina': { name: 'Argentina', code: 'ar', lang: 'es' },
+            'Mexico': { name: 'Mexico', code: 'mx', lang: 'es' },
+            'España': { name: 'España', code: 'es', lang: 'es' },
+          };
+
+          const countryInfo = countryMap[googleLoc.country];
+          if (countryInfo) {
+            inferredLocation = googleLoc.city
+              ? `${googleLoc.city}, ${countryInfo.name}`
+              : countryInfo.name;
+            countryCode = countryInfo.code;
+            language = countryInfo.lang;
+            logger.info(`Using Google detected location: ${inferredLocation} (from: ${googleLoc.address || 'snippet'})`);
+          }
+        }
+
+        // PRIORITY 1: Check LLM's primary_country (fallback if Google didn't detect) - ONLY for niche brands
         if (!inferredLocation && classificationData?.llmDirect?.primary_country) {
         const primaryCountry = classificationData.llmDirect.primary_country.toUpperCase();
         const countryMap: Record<string, { name: string; code: string; lang: string }> = {
@@ -1046,6 +1103,120 @@ IMPORTANTE:
 
     logger.debug(`Google Search score: ${score}/20 points`);
     return score;
+  }
+
+  /**
+   * Parse address string to extract location components
+   */
+  private parseAddress(address: string): { country: string; city?: string; region?: string; address?: string } | undefined {
+    // Common patterns: "Cra. 4 #7-79, La Calera Cundinamarca Colombia"
+    // "City, Region, Country" or "Street, City, Country"
+
+    const countryPatterns: Record<string, RegExp[]> = {
+      'Colombia': [
+        /\bColombia\b/i,
+        /\bCundinamarca\b/i,
+        /\bAntioquia\b/i,
+        /\bValle\s+del\s+Cauca\b/i,
+        /\bBogotá\b/i,
+        /\bMedellín\b/i,
+      ],
+      'Chile': [/\bChile\b/i, /\bSantiago\b/i],
+      'Argentina': [/\bArgentina\b/i, /\bBuenos\s+Aires\b/i],
+      'Mexico': [/\bMexico\b/i, /\bMéxico\b/i],
+      'España': [/\bEspaña\b/i, /\bSpain\b/i, /\bMadrid\b/i, /\bBarcelona\b/i],
+    };
+
+    let detectedCountry: string | undefined;
+    for (const [country, patterns] of Object.entries(countryPatterns)) {
+      if (patterns.some(pattern => pattern.test(address))) {
+        detectedCountry = country;
+        break;
+      }
+    }
+
+    if (!detectedCountry) {
+      return undefined;
+    }
+
+    // Extract city/region from Colombian addresses
+    const colombianCities = [
+      'Bogotá', 'Medellín', 'Cali', 'Barranquilla', 'Cartagena',
+      'La Calera', 'Chía', 'Zipaquirá', 'Facatativá'
+    ];
+
+    let city: string | undefined;
+    let region: string | undefined;
+
+    for (const cityName of colombianCities) {
+      if (address.includes(cityName)) {
+        city = cityName;
+        break;
+      }
+    }
+
+    // Extract region (departamento) for Colombia
+    const colombianRegions = ['Cundinamarca', 'Antioquia', 'Valle del Cauca', 'Atlántico', 'Bolívar'];
+    for (const regionName of colombianRegions) {
+      if (address.includes(regionName)) {
+        region = regionName;
+        break;
+      }
+    }
+
+    return {
+      country: detectedCountry,
+      city,
+      region,
+      address: address.trim()
+    };
+  }
+
+  /**
+   * Extract location from text (snippets, titles, etc.)
+   */
+  private extractLocationFromText(text: string): { country: string; city?: string; region?: string } | undefined {
+    // Look for address patterns with specific cities first (most reliable)
+    const specificCityPatterns = [
+      // Colombian cities with explicit country mention
+      /\b(La Calera|Bogotá|Medellín|Cali|Barranquilla|Cartagena|Chía|Zipaquirá)[\s,]+(?:Cundinamarca|Antioquia|Valle)?[\s,]*Colombia\b/i,
+      // Chilean cities
+      /\b(Santiago|Valparaíso|Concepción)[\s,]*Chile\b/i,
+      // Argentine cities
+      /\b(Buenos Aires|Córdoba|Rosario)[\s,]*Argentina\b/i,
+    ];
+
+    for (const pattern of specificCityPatterns) {
+      const match = text.match(pattern);
+      if (match) {
+        const city = match[1];
+        // Infer country from pattern
+        if (pattern.source.includes('Colombia')) {
+          return { country: 'Colombia', city };
+        } else if (pattern.source.includes('Chile')) {
+          return { country: 'Chile', city };
+        } else if (pattern.source.includes('Argentina')) {
+          return { country: 'Argentina', city };
+        }
+      }
+    }
+
+    // Fallback: just look for country mentions (don't try to parse city from unreliable patterns)
+    const countryMentions: Record<string, RegExp> = {
+      'Colombia': /\bColombia\b/i,
+      'Chile': /\bChile\b/i,
+      'Argentina': /\bArgentina\b/i,
+      'Mexico': /\bMexico\b|\bMéxico\b/i,
+      'España': /\bEspaña\b|\bSpain\b/i,
+    };
+
+    for (const [country, pattern] of Object.entries(countryMentions)) {
+      if (pattern.test(text)) {
+        return { country };
+      }
+    }
+
+    return undefined;
   }
 }
 

@@ -23,6 +23,12 @@ export interface GoogleSearchData {
   languages_detected: string[];
   domains: string[];
   international_media: boolean;
+  detected_location?: {
+    country: string;
+    city?: string;
+    region?: string;
+    address?: string;
+  };
 }
 
 /**
