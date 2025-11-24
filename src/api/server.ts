@@ -4,8 +4,8 @@
  */
 
 import express, { Application } from 'express';
-import cors from 'cors';
-import helmet from 'helmet';
+// import cors from 'cors';
+// import helmet from 'helmet';
 import { config } from '../utils/config.js';
 import { logger } from '../utils/logger.js';
 import { errorHandler } from './middleware/error-handler.js';
@@ -18,22 +18,13 @@ export function createApp(): Application {
   // Trust Railway proxy (must be before other middleware)
   app.set('trust proxy', 1);
 
-  // Disable strict routing and enable case sensitivity
-  app.enable('case sensitive routing');
+  // Disable strict routing
   app.disable('strict routing');
 
-  // Security middleware with permissive config for Railway
-  app.use(helmet({
-    contentSecurityPolicy: false,
-    crossOriginEmbedderPolicy: false,
-  }));
-
-  app.use(cors({
-    origin: process.env.CORS_ORIGIN || '*',
-    credentials: true,
-    methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
-    allowedHeaders: ['Content-Type', 'Authorization'],
-  }));
+  // CORS and Helmet disabled - not needed for API-only service
+  // If you add a frontend later, uncomment these:
+  // app.use(helmet());
+  // app.use(cors());
 
   // Body parsing
   app.use(express.json({ limit: '10mb' }));
