@@ -363,8 +363,19 @@ export async function analyzeCommand(): Promise<void> {
       logger.warn('Failed to save results to file:', error);
     }
 
-    // Save competitors to database and mark analysis as completed
+    // Save enriched data and competitors to database
     if (analysisId) {
+      // Save enriched data (for cache reuse)
+      const enrichedData: any = {
+        brandTypeAnalysis,
+        competitors: scoredCompetitors,
+      };
+
+      await brandAnalysisRepository.updateEnrichedData(analysisId, enrichedData).catch(err => {
+        logger.debug('Failed to save enriched data:', err);
+      });
+
+      // Save competitors to separate table
       const competitorsToSave = scoredCompetitors.map((comp, idx) => ({
         competitor_name: comp.name,
         competitor_url: comp.url,
@@ -378,6 +389,7 @@ export async function analyzeCommand(): Promise<void> {
         logger.debug('Failed to save competitors:', err);
       });
 
+      // Mark analysis as completed
       await brandAnalysisRepository.updateStatus(analysisId, 'completed').catch(err => {
         logger.debug('Failed to update analysis status:', err);
       });
