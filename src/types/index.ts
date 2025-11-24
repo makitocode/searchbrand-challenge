@@ -152,18 +152,18 @@ export interface User {
 
 export interface BrandAnalysis {
   id: string;
-  user_id: string;
+  user_id: string | null;
   input_brand: string;
   input_type: InputType;
   brand_name: string;
   brand_url?: string;
   industry: string;
-  category: string;
+  selected_category?: string;
   analysis_type: AnalysisType;
   status: AnalysisStatus;
   error_message?: string;
-  llm_input_analysis?: InputAnalysis;
-  llm_enriched_data?: EnrichedBrandData;
+  input_analysis?: InputAnalysis;
+  classification_result?: EnrichedBrandData;
   created_at: Date;
   started_at?: Date;
   completed_at?: Date;

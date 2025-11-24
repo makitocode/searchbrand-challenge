@@ -34,6 +34,63 @@ export async function analyzeCommand(): Promise<void> {
     const analysis: InputAnalysis = await inputAnalyzer.analyzeInput(brandInput);
     spinner.succeed('Análisis inicial completado');
 
+    // Check if we have a recent analysis for this brand (avoid duplicates)
+    const recentAnalysis = await brandAnalysisRepository.getRecentByBrandName(analysis.brandName, 7);
+
+    if (recentAnalysis && recentAnalysis.classification_result) {
+      logger.info(`Found recent analysis for ${analysis.brandName} (${recentAnalysis.id})`);
+      console.log('\n' + chalk.green('✓ Análisis existente encontrado (menos de 7 días)'));
+      console.log(chalk.dim(`  ID: ${recentAnalysis.id}`));
+      console.log(chalk.dim(`  Fecha: ${new Date(recentAnalysis.created_at).toLocaleString()}`));
+
+      // Display the existing results
+      const enrichedData = recentAnalysis.classification_result as any;
+
+      console.log('\n' + chalk.cyan('━'.repeat(60)));
+      console.log(chalk.bold('Marca analizada:'), chalk.white.bold(analysis.brandName));
+      if (recentAnalysis.brand_url) {
+        console.log(chalk.bold('URL:'), chalk.blue(recentAnalysis.brand_url));
+      }
+      console.log(
+        chalk.bold('Categoría:'),
+        chalk.white(recentAnalysis.selected_category || 'N/A')
+      );
+      console.log(chalk.cyan('━'.repeat(60)));
+
+      console.log('\n' + chalk.bold('Tipo de marca:'), chalk.white.bold(recentAnalysis.analysis_type.toUpperCase()));
+
+      if (enrichedData.brandTypeAnalysis) {
+        console.log(chalk.bold('Score:'), chalk.white(`${enrichedData.brandTypeAnalysis.score}/100`));
+        console.log(chalk.bold('Confianza:'), chalk.white(`${enrichedData.brandTypeAnalysis.confidence}%`));
+        console.log(chalk.bold('Razonamiento:'), chalk.gray(enrichedData.brandTypeAnalysis.reasoning));
+      }
+
+      if (enrichedData.competitors && enrichedData.competitors.length > 0) {
+        console.log('\n' + chalk.bold('Top Competidores:'));
+        console.log('');
+
+        for (let i = 0; i < Math.min(5, enrichedData.competitors.length); i++) {
+          const comp = enrichedData.competitors[i];
+          console.log(
+            chalk.white.bold(`${i + 1}. ${comp.name}`) +
+            chalk.gray(` - ${comp.similarityScore}% similitud`)
+          );
+
+          if (comp.url) {
+            console.log(chalk.dim(`   ${comp.url}`));
+          }
+
+          if (comp.evidence && comp.evidence.length > 0) {
+            console.log(chalk.gray(`   • ${comp.evidence[0]}`));
+          }
+          console.log('');
+        }
+      }
+
+      console.log(chalk.dim('\n💡 Tip: Este análisis tiene menos de 7 días. Los datos se reutilizan para ahorrar tiempo y costos.\n'));
+      return;
+    }
+
     // Handle ambiguity
     let selectedCategory: string | undefined;
     if (analysis.isAmbiguous && analysis.suggestedCategories) {

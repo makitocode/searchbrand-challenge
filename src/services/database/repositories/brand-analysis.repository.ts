@@ -266,6 +266,74 @@ export class BrandAnalysisRepository {
   }
 
   /**
+   * Get recent analysis by normalized brand name (to avoid duplicates)
+   */
+  async getRecentByBrandName(brandName: string, maxAgeDays: number = 7): Promise<BrandAnalysis | null> {
+    if (!(await isDatabaseAvailable())) {
+      return null;
+    }
+
+    const mode = getDatabaseMode();
+    const normalizedBrand = brandName.toLowerCase().trim();
+
+    try {
+      if (mode === 'local') {
+        const pool = getPgPool();
+        if (!pool) return null;
+
+        const result = await pool.query(
+          `SELECT * FROM brand_analyses
+           WHERE LOWER(brand_name) = $1
+           AND status = 'completed'
+           AND created_at > NOW() - INTERVAL '${maxAgeDays} days'
+           ORDER BY created_at DESC
+           LIMIT 1`,
+          [normalizedBrand]
+        );
+
+        if (result.rows.length === 0) {
+          return null;
+        }
+
+        return result.rows[0] as BrandAnalysis;
+      }
+
+      if (mode === 'supabase') {
+        const supabase = getSupabaseClient();
+        if (!supabase) return null;
+
+        const cutoffDate = new Date();
+        cutoffDate.setDate(cutoffDate.getDate() - maxAgeDays);
+
+        const { data, error } = await supabase
+          .from('brand_analyses')
+          .select('*')
+          .ilike('brand_name', normalizedBrand)
+          .eq('status', 'completed')
+          .gt('created_at', cutoffDate.toISOString())
+          .order('created_at', { ascending: false })
+          .limit(1)
+          .single();
+
+        if (error) {
+          if (error.code === 'PGRST116') {
+            return null;
+          }
+          logger.warn('Failed to get recent analysis:', error);
+          return null;
+        }
+
+        return data as BrandAnalysis;
+      }
+
+      return null;
+    } catch (error) {
+      logger.warn('Failed to get recent analysis:', error);
+      return null;
+    }
+  }
+
+  /**
    * Get user's analysis history
    */
   async getByUserId(
