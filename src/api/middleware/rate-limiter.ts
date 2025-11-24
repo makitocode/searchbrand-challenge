@@ -1,5 +1,6 @@
 /**
  * Rate Limiting Middleware
+ * Note: Trust proxy is configured in server.ts with app.set('trust proxy', 1)
  */
 
 import rateLimit from 'express-rate-limit';

@@ -15,6 +15,9 @@ import apiRouter from './routes/index.js';
 export function createApp(): Application {
   const app = express();
 
+  // Trust Railway proxy (must be before other middleware)
+  app.set('trust proxy', 1);
+
   // Security middleware
   app.use(helmet());
   app.use(cors({
