@@ -8,10 +8,18 @@
     "dev": "tsx watch src/server.ts",
     "cli": "tsx src/cli.ts",
     "build": "tsc",
+    "build:watch": "tsc --watch",
     "start": "node dist/server.js",
     "lint": "eslint src/**/*.ts",
+    "lint:fix": "eslint src/**/*.ts --fix",
     "format": "prettier --write src/**/*.ts",
-    "type-check": "tsc --noEmit"
+    "type-check": "tsc --noEmit",
+    "db:start": "docker-compose up -d",
+    "db:stop": "docker-compose down",
+    "db:restart": "docker-compose restart",
+    "db:logs": "docker-compose logs -f postgres",
+    "db:shell": "docker-compose exec postgres psql -U searchbrand -d searchbrand",
+    "db:reset": "docker-compose exec postgres psql -U searchbrand -d searchbrand -f /database-scripts/reset.sql && docker-compose restart"
   },
   "keywords": [
     "competitor-intelligence",
@@ -23,6 +31,7 @@
   "license": "ISC",
   "dependencies": {
     "@anthropic-ai/sdk": "^0.30.0",
+    "@supabase/supabase-js": "^2.84.0",
     "axios": "^1.6.2",
     "chalk": "^5.3.0",
     "cheerio": "^1.0.0-rc.12",
@@ -31,6 +40,7 @@
     "inquirer": "^9.2.12",
     "openai": "^4.77.0",
     "ora": "^8.0.1",
+    "pg": "^8.16.3",
     "serpapi": "^2.2.1",
     "winston": "^3.11.0"
   },
@@ -38,6 +48,7 @@
     "@types/express": "^4.17.21",
     "@types/inquirer": "^9.0.7",
     "@types/node": "^20.10.4",
+    "@types/pg": "^8.15.6",
     "@typescript-eslint/eslint-plugin": "^6.15.0",
     "@typescript-eslint/parser": "^6.15.0",
     "eslint": "^8.56.0",

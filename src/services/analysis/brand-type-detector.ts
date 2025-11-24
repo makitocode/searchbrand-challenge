@@ -11,17 +11,37 @@ import {
 } from '../../types/index.js';
 import { logger } from '../../utils/logger.js';
 import { callClaude } from '../llm/clients/claude-client.js';
+import { brandCacheRepository } from '../database/repositories/brand-cache.repository.js';
 
 export class BrandTypeDetector {
   /**
    * Detect brand type using multi-source approach
+   * Checks cache first to avoid redundant API calls
    */
   async detectBrandType(
     brandName: string,
     data: BrandClassificationData,
-    _claudeAnalysis?: InputAnalysis
+    _claudeAnalysis?: InputAnalysis,
+    brandUrl?: string
   ): Promise<BrandTypeAnalysis> {
     logger.info(`Detecting brand type for: ${brandName} (multi-source)`);
+
+    // Check cache first
+    const cached = await brandCacheRepository.get(brandName);
+    if (cached) {
+      logger.info(`Using cached classification for: ${brandName}`);
+      return {
+        type: cached.classification_data.brandType,
+        score: cached.classification_data.score,
+        confidence: cached.classification_data.confidence,
+        reasoning: cached.classification_data.reasoning,
+        breakdown: cached.classification_data.breakdown,
+        signals: {
+          globalIndicators: this.countGlobalIndicators(cached.classification_data.sources),
+          nicheIndicators: this.countNicheIndicators(cached.classification_data.sources),
+        },
+      };
+    }
 
     // Calculate scores from each source
     const wikipediaScore = this.scoreWikipedia(data.wikipedia);
@@ -53,7 +73,7 @@ export class BrandTypeDetector {
     const globalIndicators = this.countGlobalIndicators(data);
     const nicheIndicators = this.countNicheIndicators(data);
 
-    return {
+    const result: BrandTypeAnalysis = {
       type: classification,
       score: totalScore,
       confidence,
@@ -70,6 +90,13 @@ export class BrandTypeDetector {
         nicheIndicators,
       },
     };
+
+    // Save to cache (fire and forget - non-blocking)
+    brandCacheRepository.save(brandName, brandUrl, result, data).catch(err => {
+      logger.debug('Failed to save to cache:', err);
+    });
+
+    return result;
   }
 
   /**

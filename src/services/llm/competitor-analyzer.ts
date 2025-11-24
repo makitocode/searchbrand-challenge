@@ -1,6 +1,6 @@
 /**
  * Competitor Analyzer Service
- * Uses GPT-4 to analyze competitors and calculate similarity scores
+ * Uses Claude to analyze competitors and calculate similarity scores
  */
 
 import { callClaude } from './clients/claude-client.js';
@@ -28,7 +28,7 @@ export class CompetitorAnalyzer {
       return [];
     }
 
-    logger.info(`Analyzing ${competitors.length} competitors for ${brand.name} with GPT-4`);
+    logger.info(`Analyzing ${competitors.length} competitors for ${brand.name} with Claude`);
 
     const systemPrompt = `Eres un experto analista de inteligencia competitiva especializado en evaluar similitud entre marcas.
 
@@ -215,7 +215,7 @@ IMPORTANTE:
       logger.info(`Analyzed ${scores.length} competitors successfully`);
       return scores;
     } catch (error) {
-      logger.error('Competitor analysis with GPT-4 failed:', error instanceof Error ? error.message : 'Unknown error');
+      logger.error('Competitor analysis with Claude failed:', error);
 
       // Return simple scores as fallback
       return competitors.map(c => ({

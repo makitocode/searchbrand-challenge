@@ -1,0 +1,25 @@
+version: '3.8'
+
+services:
+  postgres:
+    image: postgres:15-alpine
+    container_name: searchbrand_postgres
+    environment:
+      POSTGRES_DB: searchbrand
+      POSTGRES_USER: searchbrand
+      POSTGRES_PASSWORD: searchbrand_dev_password
+    ports:
+      - "5434:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./database/schema.sql:/docker-entrypoint-initdb.d/001-schema.sql
+      - ./database/seed.sql:/docker-entrypoint-initdb.d/002-seed.sql
+      - ./database/reset.sql:/database-scripts/reset.sql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U searchbrand"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+volumes:
+  postgres_data:

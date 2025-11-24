@@ -7,6 +7,7 @@ import { GoogleSearchData, TrendsData } from '../../types/index.js';
 import { logger } from '../../utils/logger.js';
 import { callClaude } from '../llm/clients/claude-client.js';
 import { getJson } from 'serpapi';
+import { competitorCacheRepository } from '../database/repositories/competitor-cache.repository.js';
 
 export class GoogleSearchService {
   /**
@@ -414,6 +415,13 @@ Ejemplos de ubicación:
     classificationData?: any
   ): Promise<Array<{ name: string; url?: string; description: string }>> {
     logger.info(`Searching competitors for ${brandName} (${brandType})`);
+
+    // Check cache first
+    const cached = await competitorCacheRepository.get(brandName, industry, brandType, location);
+    if (cached) {
+      logger.info(`Using cached competitors for: ${brandName} (${cached.competitors.length} competitors)`);
+      return cached.competitors;
+    }
 
     const apiKey = process.env.SERP_API_KEY;
     if (!apiKey) {
@@ -869,8 +877,19 @@ Ejemplos de ubicación:
         );
 
         logger.info(`After filtering: ${filteredCompetitors.length} relevant competitors`);
+
+        // Save to cache (fire and forget - non-blocking)
+        competitorCacheRepository.save(brandName, industry, brandType, finalLocation, filteredCompetitors).catch(err => {
+          logger.debug('Failed to save competitors to cache:', err);
+        });
+
         return filteredCompetitors;
       }
+
+      // Save empty result to cache to avoid repeated searches
+      competitorCacheRepository.save(brandName, industry, brandType, finalLocation, competitors).catch(err => {
+        logger.debug('Failed to save competitors to cache:', err);
+      });
 
       return competitors;
     } catch (error) {

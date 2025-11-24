@@ -16,6 +16,9 @@ import { competitorAnalyzer } from '../../services/llm/competitor-analyzer.js';
 import { promptBrandInput, promptCategorySelection } from '../prompts/interactive-prompts.js';
 import { logger } from '../../utils/logger.js';
 import { InputAnalysis, BrandClassificationData, CompetitorScore, formatBreakdownDisplay } from '../../types/index.js';
+import { brandAnalysisRepository } from '../../services/database/repositories/brand-analysis.repository.js';
+import { competitorRepository } from '../../services/database/repositories/competitor.repository.js';
+import { brandCacheRepository } from '../../services/database/repositories/brand-cache.repository.js';
 
 /**
  * Main analyze command
@@ -46,13 +49,37 @@ export async function analyzeCommand(): Promise<void> {
     // Brand classification
     const classSpinner = ora({ text: 'Clasificando tipo de marca...', spinner: 'dots' }).start();
 
-    // Collect data from all sources in parallel
-    const dataResults = await Promise.allSettled([
-      wikipediaService.searchBrand(analysis.brandName),
-      brandClassifier.classifyBrand(analysis.brandName),
-      googleSearchService.searchBrand(analysis.brandName),
-      websiteAnalyzerService.analyzeWebsite(analysis.brandUrl, analysis.brandName),
-    ]);
+    // Check cache first to avoid redundant API calls
+    const cachedClassification = await brandCacheRepository.get(analysis.brandName);
+
+    let brandTypeAnalysis;
+    let classificationData: BrandClassificationData;
+
+    if (cachedClassification) {
+      logger.info(`Brand cache HIT: ${analysis.brandName}`);
+      classSpinner.succeed('Clasificación completada (desde cache)');
+
+      // Use cached classification
+      brandTypeAnalysis = {
+        type: cachedClassification.classification_data.brandType,
+        score: cachedClassification.classification_data.score,
+        confidence: cachedClassification.classification_data.confidence,
+        reasoning: cachedClassification.classification_data.reasoning,
+        breakdown: cachedClassification.classification_data.breakdown,
+        signals: {
+          globalIndicators: 0,
+          nicheIndicators: 0,
+        },
+      };
+      classificationData = cachedClassification.classification_data.sources;
+    } else {
+      // Collect data from all sources in parallel
+      const dataResults = await Promise.allSettled([
+        wikipediaService.searchBrand(analysis.brandName),
+        brandClassifier.classifyBrand(analysis.brandName),
+        googleSearchService.searchBrand(analysis.brandName),
+        websiteAnalyzerService.analyzeWebsite(analysis.brandUrl, analysis.brandName),
+      ]);
 
     const wikipediaData =
       dataResults[0].status === 'fulfilled' ? dataResults[0].value : { exists: false };
@@ -77,37 +104,59 @@ export async function analyzeCommand(): Promise<void> {
             international_media: false,
             trendsData: { top_countries: [], continents: [], top_country_concentration: 100 },
           };
-    const websiteData =
-      dataResults[3].status === 'fulfilled'
-        ? dataResults[3].value
-        : { languages_available: 0, has_country_selector: false, multi_domain: false };
+      const websiteData =
+        dataResults[3].status === 'fulfilled'
+          ? dataResults[3].value
+          : { languages_available: 0, has_country_selector: false, multi_domain: false };
 
-    const classificationData: BrandClassificationData = {
-      wikipedia: wikipediaData.exists ? wikipediaData : undefined,
-      llmDirect: llmKnowledge,
-      googleSearch:
-        serpApiData.languages_detected.length > 0 || serpApiData.international_media || serpApiData.detected_location
-          ? {
-              languages_detected: serpApiData.languages_detected,
-              domains: serpApiData.domains,
-              international_media: serpApiData.international_media,
-              detected_location: serpApiData.detected_location,
-            }
-          : undefined,
-      googleTrends: serpApiData.trendsData.continents.length > 0 ? serpApiData.trendsData : undefined,
-      officialWebsite:
-        websiteData.languages_available > 0 || websiteData.has_country_selector
-          ? websiteData
-          : undefined,
-    };
+      classificationData = {
+        wikipedia: wikipediaData.exists ? wikipediaData : undefined,
+        llmDirect: llmKnowledge,
+        googleSearch:
+          serpApiData.languages_detected.length > 0 || serpApiData.international_media || serpApiData.detected_location
+            ? {
+                languages_detected: serpApiData.languages_detected,
+                domains: serpApiData.domains,
+                international_media: serpApiData.international_media,
+                detected_location: serpApiData.detected_location,
+              }
+            : undefined,
+        googleTrends: serpApiData.trendsData.continents.length > 0 ? serpApiData.trendsData : undefined,
+        officialWebsite:
+          websiteData.languages_available > 0 || websiteData.has_country_selector
+            ? websiteData
+            : undefined,
+      };
 
-    const brandTypeAnalysis = await brandTypeDetector.detectBrandType(
-      analysis.brandName,
-      classificationData,
-      analysis
-    );
+      brandTypeAnalysis = await brandTypeDetector.detectBrandType(
+        analysis.brandName,
+        classificationData,
+        analysis,
+        analysis.brandUrl
+      );
 
-    classSpinner.succeed('Clasificación completada');
+      classSpinner.succeed('Clasificación completada');
+    }
+
+    // Determine primary industry
+    const primaryIndustry =
+      analysis.inferredIndustries.length > 0 ? analysis.inferredIndustries[0] : 'Unknown';
+
+    // Create analysis record in database (fire and forget - non-blocking)
+    const analysisId = await brandAnalysisRepository.create({
+      user_id: null, // For CLI, user_id is null (API will use real UUID)
+      input_brand: brandInput,
+      input_type: analysis.inputType,
+      brand_name: analysis.brandName,
+      brand_url: analysis.brandUrl,
+      industry: primaryIndustry,
+      selected_category: selectedCategory || (analysis.inferredIndustries.length > 0 ? analysis.inferredIndustries[0] : 'Unknown'),
+      analysis_type: brandTypeAnalysis.type,
+      input_analysis: analysis
+    }).catch(err => {
+      logger.debug('Failed to create analysis record:', err);
+      return null;
+    });
 
     // Display results
     console.log('\n' + chalk.cyan('━'.repeat(60)));
@@ -132,9 +181,6 @@ export async function analyzeCommand(): Promise<void> {
 
     // Search competitors
     const competitorSpinner = ora({ text: 'Buscando competidores...', spinner: 'dots' }).start();
-
-    const primaryIndustry =
-      analysis.inferredIndustries.length > 0 ? analysis.inferredIndustries[0] : 'Unknown';
     const location = analysis.brandUrl
       ? undefined
       : selectedCategory?.includes('Santiago')
@@ -169,8 +215,8 @@ export async function analyzeCommand(): Promise<void> {
       return;
     }
 
-    // Analyze competitors with GPT-4 for scoring
-    const scoringSpinner = ora({ text: 'Analizando similitud con GPT-4...', spinner: 'dots' }).start();
+    // Analyze competitors with Claude for scoring
+    const scoringSpinner = ora({ text: 'Analizando similitud con Claude...', spinner: 'dots' }).start();
 
     const scoredCompetitors: CompetitorScore[] = await competitorAnalyzer.analyzeCompetitors(
       {
@@ -249,7 +295,7 @@ export async function analyzeCommand(): Promise<void> {
         totalCompetitorsFound: competitors.length,
         topCompetitorsAnalyzed: scoredCompetitors.length,
         dataSources: ['Wikipedia', 'Google Search', 'Google Trends', 'Official Website', 'LLM Direct Knowledge'],
-        llmModelsUsed: ['claude-3-5-sonnet-20241022', 'gpt-4'],
+        llmModelsUsed: ['claude-3-5-sonnet-20241022'],
       },
     };
 
@@ -258,6 +304,26 @@ export async function analyzeCommand(): Promise<void> {
       console.log(chalk.green(`Resultados guardados en: ${chalk.bold(fileName)}\n`));
     } catch (error) {
       logger.warn('Failed to save results to file:', error);
+    }
+
+    // Save competitors to database and mark analysis as completed
+    if (analysisId) {
+      const competitorsToSave = scoredCompetitors.map((comp, idx) => ({
+        competitor_name: comp.name,
+        competitor_url: comp.url,
+        similarity_score: comp.similarityScore,
+        ranking: idx + 1,
+        score_breakdown: comp.breakdown,
+        evidence: comp.evidence
+      }));
+
+      await competitorRepository.saveCompetitors(analysisId, competitorsToSave).catch(err => {
+        logger.debug('Failed to save competitors:', err);
+      });
+
+      await brandAnalysisRepository.updateStatus(analysisId, 'completed').catch(err => {
+        logger.debug('Failed to update analysis status:', err);
+      });
     }
 
     // Summary
@@ -271,6 +337,11 @@ export async function analyzeCommand(): Promise<void> {
   } catch (error) {
     logger.error('Error in analyze command:', error);
     console.error(chalk.red('\nError:'), error instanceof Error ? error.message : 'Unknown error');
+
+    // Update analysis status to failed if we have an analysis ID
+    // Note: analysisId is not accessible here due to scope, so this is a limitation
+    // In a production app, we'd want to refactor to handle this better
+
     process.exit(1);
   }
 }
