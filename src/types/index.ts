@@ -134,6 +134,12 @@ export interface GoogleSearchResult {
 export * from './brand-classification.types.js';
 
 // ============================================
+// Scoring System Types
+// ============================================
+
+export * from '../core/scorer.js';
+
+// ============================================
 // Database Types
 // ============================================
 

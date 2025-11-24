@@ -4,15 +4,18 @@
 
 import chalk from 'chalk';
 import ora from 'ora';
+import fs from 'fs/promises';
+import path from 'path';
 import { inputAnalyzer } from '../../services/llm/input-analyzer.js';
 import { wikipediaService } from '../../services/scraping/wikipedia.service.js';
 import { brandTypeDetector } from '../../services/analysis/brand-type-detector.js';
 import { brandClassifier } from '../../services/llm/brand-classifier.js';
 import { googleSearchService } from '../../services/scraping/google-search.service.js';
 import { websiteAnalyzerService } from '../../services/scraping/website-analyzer.service.js';
+import { competitorAnalyzer } from '../../services/llm/competitor-analyzer.js';
 import { promptBrandInput, promptCategorySelection } from '../prompts/interactive-prompts.js';
 import { logger } from '../../utils/logger.js';
-import { InputAnalysis, BrandClassificationData } from '../../types/index.js';
+import { InputAnalysis, BrandClassificationData, CompetitorScore, formatBreakdownDisplay } from '../../types/index.js';
 
 /**
  * Main analyze command
@@ -31,7 +34,7 @@ export async function analyzeCommand(): Promise<void> {
     // Handle ambiguity
     let selectedCategory: string | undefined;
     if (analysis.isAmbiguous && analysis.suggestedCategories) {
-      console.log('\n' + chalk.yellow('⚠️  Categorías detectadas:'));
+      console.log('\n' + chalk.yellow('Categorías detectadas:'));
       for (let index = 0; index < analysis.suggestedCategories.length; index++) {
         const category = analysis.suggestedCategories[index];
         console.log(`  ${index + 1}. ${category}`);
@@ -148,32 +151,126 @@ export async function analyzeCommand(): Promise<void> {
       classificationData
     );
 
+    // Determine final location for display (from classification data or user input)
+    let finalLocation: string | undefined = location;
+    if (!finalLocation && classificationData?.googleSearch?.detected_location) {
+      const detectedLoc = classificationData.googleSearch.detected_location;
+      if (detectedLoc.city && detectedLoc.country) {
+        finalLocation = `${detectedLoc.city}, ${detectedLoc.country}`;
+      } else if (detectedLoc.country) {
+        finalLocation = detectedLoc.country;
+      }
+    }
+
     competitorSpinner.succeed(`Encontrados ${competitors.length} competidores\n`);
 
     if (competitors.length === 0) {
       console.log(chalk.yellow('No se encontraron competidores.\n'));
-    } else {
-      console.log(chalk.bold('Competidores:\n'));
-
-      for (let index = 0; index < competitors.length; index++) {
-        const competitor = competitors[index];
-        console.log(chalk.white.bold(`${index + 1}. ${competitor.name}`) + chalk.gray(' (85%)')); // TODO: Real score in Phase 4
-        console.log(`   ${chalk.gray(competitor.description)}`);
-        console.log('');
-      }
+      return;
     }
 
-    // Note about scoring
-    console.log(chalk.gray('━'.repeat(60)));
-    console.log(
-      chalk.gray(
-        'Nota: Scoring en 10 criterios será implementado en la siguiente fase con GPT-5'
-      )
+    // Analyze competitors with GPT-4 for scoring
+    const scoringSpinner = ora({ text: 'Analizando similitud con GPT-4...', spinner: 'dots' }).start();
+
+    const scoredCompetitors: CompetitorScore[] = await competitorAnalyzer.analyzeCompetitors(
+      {
+        name: analysis.brandName,
+        url: analysis.brandUrl,
+        industry: primaryIndustry,
+        brandType: brandTypeAnalysis.type,
+        location: finalLocation,
+      },
+      competitors
     );
+
+    scoringSpinner.succeed('Análisis de similitud completado\n');
+
+    // Display scored competitors
+    console.log(chalk.bold('Top Competidores:\n'));
+
+    for (let index = 0; index < Math.min(5, scoredCompetitors.length); index++) {
+      const competitor = scoredCompetitors[index];
+      const scorePercent = Math.round(competitor.similarityScore);
+
+      // Color based on score
+      let scoreColor = chalk.green;
+      if (scorePercent < 60) scoreColor = chalk.yellow;
+      if (scorePercent < 40) scoreColor = chalk.red;
+
+      console.log(chalk.white.bold(`${index + 1}. ${competitor.name}`) + scoreColor(` - ${scorePercent}% similitud`));
+      console.log('');
+
+      // Show breakdown
+      const breakdownLines = formatBreakdownDisplay(competitor.breakdown);
+      for (const line of breakdownLines) {
+        console.log(chalk.gray(line));
+      }
+
+      // Show evidence
+      if (competitor.evidence && competitor.evidence.length > 0) {
+        console.log('');
+        console.log(chalk.cyan('   Evidencias:'));
+        for (const evidence of competitor.evidence.slice(0, 4)) {
+          console.log(`   - ${evidence}`);
+        }
+      }
+
+      console.log('\n' + chalk.gray('─'.repeat(60)) + '\n');
+    }
+
+    // Export results to JSON
+    const timestamp = new Date().toISOString().replace(/[:.]/g, '-').split('T')[0];
+    const fileName = `results_${analysis.brandName.toLowerCase().replace(/\s+/g, '_')}_${timestamp}.json`;
+    const resultsPath = path.join(process.cwd(), fileName);
+
+    const results = {
+      analysis: {
+        brand: {
+          name: analysis.brandName,
+          url: analysis.brandUrl,
+          industry: primaryIndustry,
+          category: selectedCategory || (analysis.inferredIndustries.length > 0 ? analysis.inferredIndustries[0] : 'Unknown'),
+          location: finalLocation,
+        },
+        brandType: brandTypeAnalysis.type,
+        score: brandTypeAnalysis.score,
+        confidence: brandTypeAnalysis.confidence,
+        timestamp: new Date().toISOString(),
+      },
+      competitors: scoredCompetitors.map((comp, idx) => ({
+        rank: idx + 1,
+        name: comp.name,
+        url: comp.url,
+        similarity_score: comp.similarityScore,
+        breakdown: comp.breakdown,
+        evidence: comp.evidence,
+      })),
+      metadata: {
+        totalCompetitorsFound: competitors.length,
+        topCompetitorsAnalyzed: scoredCompetitors.length,
+        dataSources: ['Wikipedia', 'Google Search', 'Google Trends', 'Official Website', 'LLM Direct Knowledge'],
+        llmModelsUsed: ['claude-3-5-sonnet-20241022', 'gpt-4'],
+      },
+    };
+
+    try {
+      await fs.writeFile(resultsPath, JSON.stringify(results, null, 2), 'utf-8');
+      console.log(chalk.green(`Resultados guardados en: ${chalk.bold(fileName)}\n`));
+    } catch (error) {
+      logger.warn('Failed to save results to file:', error);
+    }
+
+    // Summary
+    console.log(chalk.gray('━'.repeat(60)));
+    console.log(chalk.cyan('Resumen:'));
+    console.log(`   - Tipo de marca: ${brandTypeAnalysis.type === 'global' ? chalk.magenta('Global') : chalk.cyan('Nicho')}`);
+    console.log(`   - Competidores encontrados: ${chalk.white.bold(competitors.length)}`);
+    console.log(`   - Analizados con scoring: ${chalk.white.bold(scoredCompetitors.length)}`);
+    console.log(`   - Promedio de similitud: ${chalk.white.bold(Math.round(scoredCompetitors.reduce((sum, c) => sum + c.similarityScore, 0) / scoredCompetitors.length))}%`);
     console.log(chalk.gray('━'.repeat(60)) + '\n');
   } catch (error) {
     logger.error('Error in analyze command:', error);
-    console.error(chalk.red('\n❌ Error:'), error instanceof Error ? error.message : 'Unknown error');
+    console.error(chalk.red('\nError:'), error instanceof Error ? error.message : 'Unknown error');
     process.exit(1);
   }
 }

@@ -29,11 +29,11 @@ Incluye: nacional, regional, local, especializado
 **Por qué:** Indicador de notabilidad documentada
 
 **Datos a extraer:**
-- ✅ Existe página: Sí/No
-- ✅ Número de idiomas disponibles
-- ✅ Primer párrafo completo
-- ✅ Categorías (buscar: "multinational", "international", "global")
-- ⚠️ Infobox (países de operación, si existe)
+-  Existe página: Sí/No
+-  Número de idiomas disponibles
+-  Primer párrafo completo
+-  Categorías (buscar: "multinational", "international", "global")
+-  Infobox (países de operación, si existe)
 
 **Señales GLOBAL:**
 - Wikipedia en **3+ idiomas** (crítico)
@@ -194,48 +194,6 @@ Score < 50  → NICHO
 | 0-39 | BAJA (<50%) | Evidencia insuficiente o contradictoria |
 
 **Confianza BAJA:** Solicitar contexto adicional al usuario o marcar para revisión manual
-
----
-
-## Flujo de Implementación
-
-```
-INPUT: Nombre de marca
-    ↓
-┌──────────────────────────────┐
-│ FASE 1: Claude Input Analyzer│  ← Ya implementado
-│ - Detecta ambigüedad          │
-│ - Infiere industrias          │
-│ - Sugiere categorías          │
-└──────────────────────────────┘
-    ↓
-┌──────────────────────────────┐
-│ FASE 2: Recolección de Datos │
-│ (Paralelo: 5 fuentes)         │
-│                               │
-│ 1. Wikipedia (EN + ES)        │  ← Ya implementado
-│ 2. Google Search              │  → A implementar
-│ 3. Google Trends              │  → A implementar
-│ 4. Sitio Web Oficial          │  → A implementar
-│ 5. LLM Directo (GPT-5/Claude) │  → A implementar
-└──────────────────────────────┘
-    ↓
-┌──────────────────────────────┐
-│ FASE 3: Scoring + Decisión   │  → A implementar
-│                               │
-│ Input: Scores de 5 fuentes   │
-│ Cálculo: Suma ponderada       │
-│ Decisión: Score >= 50         │
-│         → GLOBAL              │
-│         Score < 50            │
-│         → NICHO               │
-│                               │
-│ LLM Final: Justificación      │
-│            y Confianza        │
-└──────────────────────────────┘
-    ↓
-OUTPUT: GLOBAL/NICHO + Score + Confianza + Justificación
-```
 
 ---
 
