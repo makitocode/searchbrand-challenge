@@ -6,9 +6,9 @@
  */
 
 import chalk from 'chalk';
-import { analyzeCommand } from './cli/commands/analyze.command';
-import { promptContinue } from './cli/prompts/interactive-prompts';
-import { logger } from './utils/logger';
+import { analyzeCommand } from './cli/commands/analyze.command.js';
+import { promptContinue } from './cli/prompts/interactive-prompts.js';
+import { logger } from './utils/logger.js';
 
 /**
  * Display welcome banner
@@ -21,46 +21,37 @@ function displayWelcomeBanner(): void {
   );
   console.log(chalk.gray('  Powered by Claude AI + GPT-5'));
   console.log(chalk.cyan('═'.repeat(60)) + '\n');
-  console.log(
-    chalk.yellow('  📍 FASE 1:') +
-      chalk.white(' Análisis de Input con IA') +
-      '\n'
-  );
 }
 
 /**
- * Main CLI entry point
+ * Main CLI execution
  */
-async function main() {
-  try {
-    displayWelcomeBanner();
+try {
+  displayWelcomeBanner();
 
-    // Main loop - allows analyzing multiple brands
-    let continueAnalyzing = true;
+  // Main loop - allows analyzing multiple brands
+  let continueAnalyzing = true;
 
-    while (continueAnalyzing) {
-      await analyzeCommand();
+  while (continueAnalyzing) {
+    await analyzeCommand();
 
-      // Ask if user wants to continue
-      continueAnalyzing = await promptContinue();
+    // Ask if user wants to continue
+    continueAnalyzing = await promptContinue();
 
-      if (continueAnalyzing) {
-        console.log('\n' + chalk.gray('─'.repeat(60)) + '\n');
-      }
+    if (continueAnalyzing) {
+      console.log('\n' + chalk.gray('─'.repeat(60)) + '\n');
     }
-
-    // Goodbye message
-    console.log('\n' + chalk.green('✓ ¡Gracias por usar SearchBrand!'));
-    console.log(chalk.gray('  Desarrollado por Miguel González\n'));
-    logger.info('CLI session ended by user');
-  } catch (error) {
-    logger.error('Fatal error in CLI:', error);
-    console.error(
-      chalk.red('\n❌ Error fatal:'),
-      error instanceof Error ? error.message : 'Unknown error'
-    );
-    process.exit(1);
   }
-}
 
-main();
+  // Goodbye message
+  console.log('\n' + chalk.green('✓ ¡Gracias por usar SearchBrand!'));
+  console.log(chalk.gray('  Desarrollado por Miguel González\n'));
+  logger.info('CLI session ended by user');
+} catch (error) {
+  logger.error('Fatal error in CLI:', error);
+  console.error(
+    chalk.red('\n❌ Error fatal:'),
+    error instanceof Error ? error.message : 'Unknown error'
+  );
+  process.exit(1);
+}

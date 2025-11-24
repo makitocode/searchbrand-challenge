@@ -22,36 +22,36 @@ export class InputAnalyzer {
     // Detect if input is a URL
     const inputType = isValidUrl(brandInput) ? 'url' : 'brand_name';
 
-    const systemPrompt = `You are an expert brand analyst. Your task is to analyze brand names or URLs and provide structured insights about them.`;
+    const systemPrompt = `Eres un analista experto de marcas. Tu tarea es analizar nombres de marcas o URLs y proporcionar información estructurada sobre ellas.`;
 
     const prompt = `
-Analyze this brand input: "${brandInput}"
+Analiza esta marca: "${brandInput}"
 
-Determine:
-1. What is the brand name? (extract from URL if needed)
-2. What industry/industries does this brand likely operate in?
-3. Is this input ambiguous? (Could it refer to multiple different types of businesses?)
-4. If ambiguous, suggest 2-4 specific business categories to help disambiguate
+Determina:
+1. ¿Cuál es el nombre de la marca? (extráelo de la URL si es necesario)
+2. ¿En qué industria(s) opera probablemente esta marca?
+3. ¿Esta entrada es ambigua? (¿Podría referirse a múltiples tipos de negocios diferentes?)
+4. Si es ambigua, sugiere 2-4 categorías específicas de negocio para ayudar a desambiguar
 
-Important context:
-- The user wants to find competitors for this brand
-- We need to understand exactly what type of business this is
-- Be specific with industries (e.g., "Streaming Music Service" not just "Technology")
-- Ambiguous means the brand name alone doesn't clearly indicate ONE specific business type
+Contexto importante:
+- El usuario quiere encontrar competidores para esta marca
+- Necesitamos entender exactamente qué tipo de negocio es
+- Sé específico con las industrias (ej., "Servicio de Streaming Musical" no solo "Tecnología")
+- Ambiguo significa que el nombre de la marca solo no indica claramente UN tipo específico de negocio
 
-Respond in valid JSON format with this structure:
+Responde en formato JSON válido con esta estructura:
 {
-  "brandName": "extracted or cleaned brand name",
-  "brandUrl": "URL if provided, otherwise null",
-  "inferredIndustries": ["industry 1", "industry 2"],
-  "isAmbiguous": true or false,
-  "suggestedCategories": ["category 1", "category 2"] or null if not ambiguous,
-  "confidence": 0-100 (how confident you are in this analysis),
-  "reasoning": "brief explanation of your analysis"
+  "brandName": "nombre de marca extraído o limpio",
+  "brandUrl": "URL si se proporcionó, de lo contrario null",
+  "inferredIndustries": ["industria 1", "industria 2"],
+  "isAmbiguous": true o false,
+  "suggestedCategories": ["categoría 1", "categoría 2"] o null si no es ambiguo,
+  "confidence": 0-100 (qué tan seguro estás de este análisis),
+  "reasoning": "breve explicación de tu análisis"
 }
 
-Example for ambiguous input:
-Input: "Herbívoro"
+Ejemplo para entrada ambigua:
+Entrada: "Herbívoro"
 {
   "brandName": "Herbívoro",
   "brandUrl": null,
@@ -62,8 +62,8 @@ Input: "Herbívoro"
   "reasoning": "El nombre sugiere relación con comida vegana/plant-based, pero podría ser restaurante, marca de productos, o incluso cosmética. Necesita desambiguación."
 }
 
-Example for clear input:
-Input: "Spotify"
+Ejemplo para entrada clara:
+Entrada: "Spotify"
 {
   "brandName": "Spotify",
   "brandUrl": null,
@@ -74,7 +74,7 @@ Input: "Spotify"
   "reasoning": "Spotify es una marca globalmente reconocida de streaming musical. No hay ambigüedad."
 }
 
-Now analyze: "${brandInput}"
+Ahora analiza: "${brandInput}"
 `;
 
     try {
@@ -83,9 +83,9 @@ Now analyze: "${brandInput}"
       // Extract JSON from response (Claude might wrap it in markdown)
       let jsonStr = response.trim();
       if (jsonStr.startsWith('```json')) {
-        jsonStr = jsonStr.replace(/```json\n?/g, '').replace(/```\n?/g, '');
+        jsonStr = jsonStr.replaceAll(/```json\n?/g, '').replaceAll(/```\n?/g, '');
       } else if (jsonStr.startsWith('```')) {
-        jsonStr = jsonStr.replace(/```\n?/g, '');
+        jsonStr = jsonStr.replaceAll(/```\n?/g, '');
       }
 
       const analysis = JSON.parse(jsonStr);
