@@ -3,10 +3,10 @@
  * Uses Claude to analyze and understand brand input from the user
  */
 
-import { callClaude } from './clients/claude-client';
-import { InputAnalysis } from '../../types';
-import { logger } from '../../utils/logger';
-import { isValidUrl } from '../../utils/validators';
+import { callClaude } from './clients/claude-client.js';
+import { InputAnalysis } from '../../types/index.js';
+import { logger } from '../../utils/logger.js';
+import { isValidUrl } from '../../utils/validators.js';
 
 export class InputAnalyzer {
   /**
