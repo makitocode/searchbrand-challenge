@@ -32,7 +32,8 @@ export function createApp(): Application {
 
   // Debug middleware (logs actual method received)
   app.use((req, _res, next) => {
-    logger.debug(`[${req.method}] ${req.path} - Headers: ${JSON.stringify(req.headers)}`);
+    logger.info(`🔍 RECEIVED: [${req.method}] ${req.path}`);
+    logger.info(`🔍 Headers: ${JSON.stringify(req.headers, null, 2)}`);
     next();
   });
 
