@@ -18,16 +18,32 @@ export function createApp(): Application {
   // Trust Railway proxy (must be before other middleware)
   app.set('trust proxy', 1);
 
-  // Security middleware
-  app.use(helmet());
+  // Disable strict routing and enable case sensitivity
+  app.enable('case sensitive routing');
+  app.disable('strict routing');
+
+  // Security middleware with permissive config for Railway
+  app.use(helmet({
+    contentSecurityPolicy: false,
+    crossOriginEmbedderPolicy: false,
+  }));
+
   app.use(cors({
     origin: process.env.CORS_ORIGIN || '*',
     credentials: true,
+    methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
+    allowedHeaders: ['Content-Type', 'Authorization'],
   }));
 
   // Body parsing
   app.use(express.json({ limit: '10mb' }));
   app.use(express.urlencoded({ extended: true }));
+
+  // Debug middleware (logs actual method received)
+  app.use((req, _res, next) => {
+    logger.debug(`[${req.method}] ${req.path} - Headers: ${JSON.stringify(req.headers)}`);
+    next();
+  });
 
   // Request logging
   app.use(requestLogger);
@@ -44,6 +60,31 @@ export function createApp(): Application {
 
   // API routes
   app.use('/api/v1', apiRouter);
+
+  // Debug route to list all registered routes
+  if (config.nodeEnv !== 'production') {
+    app.get('/debug/routes', (_req, res) => {
+      const routes: any[] = [];
+      app._router.stack.forEach((middleware: any) => {
+        if (middleware.route) {
+          routes.push({
+            path: middleware.route.path,
+            methods: Object.keys(middleware.route.methods),
+          });
+        } else if (middleware.name === 'router') {
+          middleware.handle.stack.forEach((handler: any) => {
+            if (handler.route) {
+              routes.push({
+                path: handler.route.path,
+                methods: Object.keys(handler.route.methods),
+              });
+            }
+          });
+        }
+      });
+      res.json({ routes });
+    });
+  }
 
   // Error handling
   app.use(errorHandler);
