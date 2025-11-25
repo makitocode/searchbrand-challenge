@@ -73,32 +73,38 @@ export function getSupabaseClient(): SupabaseClient | null {
 /**
  * Get database client (singleton)
  * Returns Supabase client for compatibility with existing code
- * Automatically switches based on environment variables
+ * Automatically switches based on NODE_ENV:
+ * - development: Uses local PostgreSQL (DATABASE_URL)
+ * - production: Uses Supabase Cloud (SUPABASE_URL + SUPABASE_KEY)
  */
 export function getDatabaseClient(): SupabaseClient {
-  // Priority 1: Try local PostgreSQL via DATABASE_URL
-  const databaseUrl = process.env.DATABASE_URL;
-  if (databaseUrl && databaseUrl.startsWith('postgresql://')) {
-    // Initialize pg pool but still need to return something for compatibility
-    getPgPool();
+  const nodeEnv = process.env.NODE_ENV || 'development';
 
-    // For local, we'll create a mock Supabase client
-    // The actual queries will be handled by repositories using getPgPool()
-    if (!supabaseClient) {
-      logger.warn('Using local PostgreSQL - Supabase client methods will not work');
-      supabaseClient = createClient(
-        'http://localhost:54321',
-        'dummy-key',
-        {
-          db: { schema: 'public' },
-          auth: { persistSession: false }
-        }
-      );
+  // In development: Use local PostgreSQL
+  if (nodeEnv === 'development') {
+    const databaseUrl = process.env.DATABASE_URL;
+    if (databaseUrl && databaseUrl.startsWith('postgresql://')) {
+      // Initialize pg pool but still need to return something for compatibility
+      getPgPool();
+
+      // For local, we'll create a mock Supabase client
+      // The actual queries will be handled by repositories using getPgPool()
+      if (!supabaseClient) {
+        logger.warn('Using local PostgreSQL - Supabase client methods will not work');
+        supabaseClient = createClient(
+          'http://localhost:54321',
+          'dummy-key',
+          {
+            db: { schema: 'public' },
+            auth: { persistSession: false }
+          }
+        );
+      }
+      return supabaseClient;
     }
-    return supabaseClient;
   }
 
-  // Priority 2: Try Supabase Cloud
+  // In production: Use Supabase Cloud
   const supabaseUrl = process.env.SUPABASE_URL;
   const supabaseKey = process.env.SUPABASE_KEY;
 
@@ -108,6 +114,7 @@ export function getDatabaseClient(): SupabaseClient {
       return client;
     }
   }
+
 
   // No database configured - this is OK, features will be disabled
   logger.warn('No database configured. Cache and persistence features will be disabled.');

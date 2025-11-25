@@ -81,15 +81,37 @@ docker ps | grep searchbrand
 npm run build
 ```
 
-### 5. Ejecutar el CLI
+### 5a. Ejecutar el CLI
 
 ```bash
 # Ejecutar el comando analyze
 npm run cli
 
 # O en modo desarrollo (con hot-reload)
-npm run dev
+npm run dev -- analyze
 ```
+
+### 5b. Ejecutar el API Server
+
+```bash
+# Modo desarrollo (con hot-reload)
+npm run dev
+
+# O modo producción
+npm run build
+npm start
+```
+
+El servidor estará disponible en: **http://localhost:3000**
+
+**Endpoints disponibles:**
+- `GET /health` - Health check
+- `POST /api/v1/auth/login` - Autenticación
+- `POST /api/v1/analysis` - Crear análisis (requiere auth)
+- `GET /api/v1/analysis/history` - Historial de análisis (requiere auth)
+- `GET /api/v1/analysis/:id` - Obtener análisis por ID (requiere auth)
+
+**Nota:** El API y el CLI comparten la misma base de datos PostgreSQL local.
 
 ## Comandos Disponibles
 
@@ -125,10 +147,13 @@ npm run build
 npm run build:watch
 
 # Ejecutar CLI en modo desarrollo
-npm run dev -- analyze
-
-# Ejecutar CLI en modo producción
 npm run cli -- analyze
+
+# Ejecutar API Server en modo desarrollo
+npm run dev
+
+# Ejecutar API Server en modo producción
+npm run build && npm start
 ```
 
 ### Comandos de Linting y Formato
@@ -150,9 +175,16 @@ searchbrand-challenge/
 │   ├── seed.sql            # Datos iniciales
 │   └── reset.sql           # Script para resetear la BD
 ├── src/
-│   ├── cli/                # Comandos CLI
+│   ├── api/                # API REST
+│   │   ├── controllers/    # Controllers (auth, analysis)
+│   │   ├── middleware/     # Middleware (auth, error handling)
+│   │   ├── routes/         # Route definitions
+│   │   └── server.ts       # Express server setup
+│   ├── cli.ts              # CLI entry point
+│   ├── index.ts            # API entry point
 │   ├── services/           # Lógica de negocio
 │   │   ├── analysis/       # Análisis de marcas
+│   │   ├── auth/           # Autenticación JWT
 │   │   ├── database/       # Cliente y repositorios DB
 │   │   ├── llm/            # Clientes LLM (Claude, GPT-4)
 │   │   └── scraping/       # Scraping y búsqueda
@@ -165,7 +197,7 @@ searchbrand-challenge/
 
 ## Flujo de Trabajo Típico
 
-### Primera vez (setup completo)
+### Primera vez (setup completo para CLI)
 
 ```bash
 # 1. Instalar dependencias
@@ -181,8 +213,27 @@ npm run db:start
 # 4. Compilar proyecto
 npm run build
 
-# 5. Ejecutar análisis
+# 5. Ejecutar análisis CLI
 npm run cli
 ```
+
+### Primera vez (setup completo para API)
+
+```bash
+# 1-4. Mismo proceso que CLI (instalar, configurar, base de datos, compilar)
+
+# 5. Iniciar API Server
+npm run dev
+
+# El servidor estará en http://localhost:3000
+# Endpoints disponibles:
+# - GET /health
+# - POST /api/v1/auth/login
+# - POST /api/v1/analysis
+# - GET /api/v1/analysis/history
+# - GET /api/v1/analysis/:id
+```
+
+**Nota importante:** El API y el CLI comparten la misma base de datos PostgreSQL local, por lo que los análisis realizados desde el CLI serán visibles en el API y viceversa.
 
 ---

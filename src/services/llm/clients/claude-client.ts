@@ -4,8 +4,8 @@
  */
 
 import Anthropic from '@anthropic-ai/sdk';
-import { config } from '../../../utils/config';
-import { logger } from '../../../utils/logger';
+import { config } from '../../../utils/config.js';
+import { logger } from '../../../utils/logger.js';
 
 export const claudeClient = new Anthropic({
   apiKey: config.anthropicApiKey,

@@ -21,6 +21,7 @@ nano .env
 ANTHROPIC_API_KEY=sk-ant-api03-TU_API_KEY_AQUI
 OPENAI_API_KEY=sk-proj-TU_API_KEY_AQUI
 SERP_API_KEY=tu_serpapi_key_aqui  # Opcional pero recomendado
+JWT_SECRET=your-super-secret-jwt-key-change-this
 ```
 
 ### 3. Iniciar base de datos
@@ -42,7 +43,7 @@ Deberías ver: `database system is ready to accept connections`
 npm run build
 ```
 
-### 5. ¡Ejecutar análisis!
+### 5a. ¡Ejecutar análisis con CLI!
 ```bash
 npm run cli -- analyze
 ```
@@ -51,6 +52,68 @@ El CLI te preguntará qué marca analizar. Prueba con:
 - `Starbucks` (marca global)
 - `Cafe Soca` (marca nicho colombiana)
 - `https://www.nike.com` (URL de marca)
+
+### 5b. ¡Iniciar API Server!
+```bash
+npm run dev
+```
+
+El servidor estará disponible en **http://localhost:3000**
+
+**Endpoints:**
+- `GET /health` - Health check
+- `POST /api/v1/auth/login` - Login
+- `POST /api/v1/analysis` - Crear análisis (requiere auth)
+- `GET /api/v1/analysis/history` - Historial (requiere auth)
+- `GET /api/v1/analysis/:id` - Obtener análisis (requiere auth)
+
+---
+
+## 🔌 Probar el API
+
+### 1. Health Check
+```bash
+curl http://localhost:3000/health
+```
+
+### 2. Login
+```bash
+curl -X POST http://localhost:3000/api/v1/auth/login \
+  -H "Content-Type: application/json" \
+  -d '{"email": "user@example.com", "password": "your-password"}'
+```
+
+**Nota:** Necesitas crear un usuario en la base de datos primero. Ejecuta `npm run db:seed` para crear el usuario de prueba, o crea uno manualmente.
+
+**Respuesta:**
+```json
+{
+  "success": true,
+  "data": {
+    "user": {
+      "id": "uuid",
+      "email": "user@example.com"
+    },
+    "token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
+  }
+}
+```
+
+### 3. Crear análisis (requiere token)
+```bash
+curl -X POST http://localhost:3000/api/v1/analysis \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer TU_TOKEN_AQUI" \
+  -d '{"brand": "Starbucks"}'
+```
+
+### 4. Ver historial
+```bash
+curl http://localhost:3000/api/v1/analysis/history \
+  -H "Authorization: Bearer TU_TOKEN_AQUI"
+```
+
+**Nota:** El token JWT expira cada 30 minutos. Después de eso necesitarás hacer login nuevamente.
 
 ---
 

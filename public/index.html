@@ -1,0 +1,464 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SearchBrand - Análisis de Competidores</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 15px;
+        }
+
+        .container {
+            background: white;
+            border-radius: 20px;
+            box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+            padding: 20px;
+            max-width: 800px;
+            width: 100%;
+        }
+
+        h1 {
+            color: #333;
+            margin-bottom: 8px;
+            font-size: 1.8em;
+        }
+
+        .subtitle {
+            color: #666;
+            margin-bottom: 20px;
+            font-size: 0.95em;
+        }
+
+        .search-box {
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+            margin-bottom: 25px;
+        }
+
+        input {
+            width: 100%;
+            padding: 14px 16px;
+            font-size: 16px;
+            border: 2px solid #e0e0e0;
+            border-radius: 10px;
+            outline: none;
+            transition: border-color 0.3s;
+        }
+
+        input:focus {
+            border-color: #667eea;
+        }
+
+        button {
+            width: 100%;
+            padding: 14px 20px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border: none;
+            border-radius: 10px;
+            font-size: 16px;
+            font-weight: bold;
+            cursor: pointer;
+            transition: transform 0.2s, box-shadow 0.2s;
+            white-space: nowrap;
+        }
+
+        /* Tablet and desktop styles */
+        @media (min-width: 768px) {
+            body {
+                padding: 20px;
+            }
+
+            .container {
+                padding: 40px;
+            }
+
+            h1 {
+                font-size: 2.5em;
+                margin-bottom: 10px;
+            }
+
+            .subtitle {
+                font-size: 1.1em;
+                margin-bottom: 30px;
+            }
+
+            .search-box {
+                flex-direction: row;
+                gap: 10px;
+                margin-bottom: 30px;
+            }
+
+            input {
+                flex: 1;
+                padding: 15px 20px;
+            }
+
+            button {
+                width: auto;
+                padding: 15px 30px;
+            }
+        }
+
+        button:hover:not(:disabled) {
+            transform: translateY(-2px);
+            box-shadow: 0 5px 15px rgba(102, 126, 234, 0.4);
+        }
+
+        button:disabled {
+            opacity: 0.6;
+            cursor: not-allowed;
+        }
+
+        .loading {
+            text-align: center;
+            padding: 40px;
+            color: #666;
+        }
+
+        .loading-spinner {
+            display: inline-block;
+            width: 50px;
+            height: 50px;
+            border: 3px solid rgba(102, 126, 234, 0.3);
+            border-radius: 50%;
+            border-top-color: #667eea;
+            animation: spin 1s ease-in-out infinite;
+        }
+
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+
+        .results {
+            animation: fadeIn 0.5s;
+        }
+
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(10px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+
+        .brand-info {
+            background: #f8f9fa;
+            border-radius: 10px;
+            padding: 20px;
+            margin-bottom: 30px;
+        }
+
+        .brand-info h2 {
+            color: #333;
+            margin-bottom: 15px;
+        }
+
+        .info-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 15px;
+        }
+
+        .info-item {
+            display: flex;
+            flex-direction: column;
+        }
+
+        .info-label {
+            color: #666;
+            font-size: 0.9em;
+            margin-bottom: 5px;
+        }
+
+        .info-value {
+            color: #333;
+            font-weight: bold;
+            font-size: 1.1em;
+        }
+
+        .badge {
+            display: inline-block;
+            padding: 5px 10px;
+            border-radius: 5px;
+            font-size: 0.9em;
+            font-weight: bold;
+        }
+
+        .badge-global {
+            background: #e3f2fd;
+            color: #1976d2;
+        }
+
+        .badge-niche {
+            background: #fce4ec;
+            color: #c2185b;
+        }
+
+        .competitors {
+            margin-top: 30px;
+        }
+
+        .competitors h3 {
+            color: #333;
+            margin-bottom: 20px;
+        }
+
+        .competitor-card {
+            background: white;
+            border: 2px solid #e0e0e0;
+            border-radius: 10px;
+            padding: 20px;
+            margin-bottom: 15px;
+            transition: all 0.3s;
+        }
+
+        .competitor-card:hover {
+            border-color: #667eea;
+            box-shadow: 0 5px 15px rgba(0,0,0,0.1);
+        }
+
+        .competitor-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 10px;
+        }
+
+        .competitor-name {
+            font-size: 1.3em;
+            font-weight: bold;
+            color: #333;
+        }
+
+        .similarity-score {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 5px 15px;
+            border-radius: 20px;
+            font-weight: bold;
+        }
+
+        .evidence-list {
+            list-style: none;
+            margin-top: 10px;
+        }
+
+        .evidence-list li {
+            padding: 5px 0;
+            padding-left: 20px;
+            position: relative;
+            color: #666;
+        }
+
+        .evidence-list li:before {
+            content: "✓";
+            position: absolute;
+            left: 0;
+            color: #4caf50;
+            font-weight: bold;
+        }
+
+        .error {
+            background: #ffebee;
+            color: #c62828;
+            padding: 20px;
+            border-radius: 10px;
+            margin-top: 20px;
+        }
+
+        .examples {
+            margin-top: 30px;
+            padding-top: 30px;
+            border-top: 1px solid #e0e0e0;
+        }
+
+        .examples h4 {
+            color: #666;
+            margin-bottom: 15px;
+        }
+
+        .example-chips {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 10px;
+        }
+
+        .chip {
+            padding: 8px 15px;
+            background: #f0f0f0;
+            border-radius: 20px;
+            cursor: pointer;
+            transition: all 0.3s;
+            font-size: 0.9em;
+        }
+
+        .chip:hover {
+            background: #e0e0e0;
+            transform: translateY(-2px);
+        }
+
+        .processing-time {
+            text-align: center;
+            color: #666;
+            font-size: 0.9em;
+            margin-top: 20px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🔍 SearchBrand</h1>
+        <p class="subtitle">Análisis de competidores con IA</p>
+
+        <div class="search-box">
+            <input type="text" id="brandInput" placeholder="Ingrese el nombre de una marca..." />
+            <button id="analyzeBtn" onclick="analyzeBrand()">Analizar</button>
+        </div>
+
+        <div id="results"></div>
+
+        <div class="examples">
+            <h4>Prueba con estos ejemplos:</h4>
+            <div class="example-chips">
+                <div class="chip" onclick="setExample('Spotify')">Spotify</div>
+                <div class="chip" onclick="setExample('Nike')">Nike</div>
+                <div class="chip" onclick="setExample('Coca-Cola')">Coca-Cola</div>
+                <div class="chip" onclick="setExample('Restaurante Herbívoro Bogotá')">Restaurante Herbívoro</div>
+                <div class="chip" onclick="setExample('Panadería Vegana Santiago')">Panadería Vegana Santiago</div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        function setExample(brand) {
+            document.getElementById('brandInput').value = brand;
+        }
+
+        async function analyzeBrand() {
+            const input = document.getElementById('brandInput');
+            const brand = input.value.trim();
+
+            if (!brand) {
+                alert('Por favor ingrese el nombre de una marca');
+                return;
+            }
+
+            const resultsDiv = document.getElementById('results');
+            const analyzeBtn = document.getElementById('analyzeBtn');
+
+            // Show loading
+            resultsDiv.innerHTML = `
+                <div class="loading">
+                    <div class="loading-spinner"></div>
+                    <p style="margin-top: 20px;">Analizando <strong>${brand}</strong>...</p>
+                    <p style="margin-top: 10px; font-size: 0.9em;">Esto puede tomar 5-15 segundos</p>
+                </div>
+            `;
+
+            analyzeBtn.disabled = true;
+            analyzeBtn.textContent = 'Analizando...';
+
+            try {
+                const startTime = Date.now();
+                const response = await fetch('/api/v1/analysis/quick', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({ brand })
+                });
+
+                const data = await response.json();
+                const processingTime = ((Date.now() - startTime) / 1000).toFixed(1);
+
+                if (data.success && data.data.status === 'completed') {
+                    displayResults(data.data, processingTime);
+                } else {
+                    throw new Error('No se pudo analizar la marca');
+                }
+            } catch (error) {
+                resultsDiv.innerHTML = `
+                    <div class="error">
+                        <strong>Error:</strong> ${error.message}
+                    </div>
+                `;
+            } finally {
+                analyzeBtn.disabled = false;
+                analyzeBtn.textContent = 'Analizar';
+            }
+        }
+
+        function displayResults(data, processingTime) {
+            const resultsDiv = document.getElementById('results');
+
+            const competitorsHtml = data.competitors.map(comp => `
+                <div class="competitor-card">
+                    <div class="competitor-header">
+                        <span class="competitor-name">${comp.name}</span>
+                        <span class="similarity-score">${comp.similarityScore}%</span>
+                    </div>
+                    <ul class="evidence-list">
+                        ${comp.evidence.map(e => `<li>${e}</li>`).join('')}
+                    </ul>
+                </div>
+            `).join('');
+
+            resultsDiv.innerHTML = `
+                <div class="results">
+                    <div class="brand-info">
+                        <h2>${data.brand_name}</h2>
+                        <div class="info-grid">
+                            <div class="info-item">
+                                <span class="info-label">Tipo de marca</span>
+                                <span class="info-value">
+                                    <span class="badge ${data.brand_type === 'global' ? 'badge-global' : 'badge-niche'}">
+                                        ${data.brand_type === 'global' ? 'Global' : 'Nicho/Local'}
+                                    </span>
+                                </span>
+                            </div>
+                            <div class="info-item">
+                                <span class="info-label">Industria</span>
+                                <span class="info-value">${data.industry}</span>
+                            </div>
+                            ${data.location ? `
+                                <div class="info-item">
+                                    <span class="info-label">Ubicación</span>
+                                    <span class="info-value">${data.location}</span>
+                                </div>
+                            ` : ''}
+                        </div>
+                    </div>
+
+                    <div class="competitors">
+                        <h3>Competidores Principales (${data.competitors.length})</h3>
+                        ${competitorsHtml}
+                    </div>
+
+                    <div class="processing-time">
+                        Análisis completado en ${processingTime} segundos
+                    </div>
+                </div>
+            `;
+        }
+
+        // Allow Enter key to trigger search
+        document.getElementById('brandInput').addEventListener('keypress', function(e) {
+            if (e.key === 'Enter') {
+                analyzeBrand();
+            }
+        });
+    </script>
+</body>
+</html>

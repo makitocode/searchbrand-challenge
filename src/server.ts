@@ -4,8 +4,8 @@
  */
 
 import express from 'express';
-import { logger } from './utils/logger';
-import { config } from './utils/config';
+import { logger } from './utils/logger.js';
+import { config } from './utils/config.js';
 
 const app = express();
 

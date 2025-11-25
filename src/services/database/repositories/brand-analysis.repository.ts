@@ -35,6 +35,8 @@ export class BrandAnalysisRepository {
     }
 
     const mode = getDatabaseMode();
+    // Normalize brand name to avoid case-sensitivity duplicates
+    const normalizedBrandName = data.brand_name.trim();
 
     try {
       if (mode === 'local') {
@@ -49,7 +51,7 @@ export class BrandAnalysisRepository {
             data.user_id,
             data.input_brand,
             data.input_type,
-            data.brand_name,
+            normalizedBrandName,
             data.brand_url || null,
             data.industry,
             data.selected_category || null,
@@ -72,6 +74,7 @@ export class BrandAnalysisRepository {
           .from('brand_analyses')
           .insert({
             ...data,
+            brand_name: normalizedBrandName,
             status: 'processing' as AnalysisStatus,
             started_at: new Date().toISOString()
           })

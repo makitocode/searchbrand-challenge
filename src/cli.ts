@@ -26,32 +26,38 @@ function displayWelcomeBanner(): void {
 /**
  * Main CLI execution
  */
-try {
-  displayWelcomeBanner();
+async function main() {
+  try {
+    displayWelcomeBanner();
 
-  // Main loop - allows analyzing multiple brands
-  let continueAnalyzing = true;
+    // Main loop - allows analyzing multiple brands
+    let continueAnalyzing = true;
 
-  while (continueAnalyzing) {
-    await analyzeCommand();
+    while (continueAnalyzing) {
+      await analyzeCommand();
 
-    // Ask if user wants to continue
-    continueAnalyzing = await promptContinue();
+      // Ask if user wants to continue
+      continueAnalyzing = await promptContinue();
 
-    if (continueAnalyzing) {
-      console.log('\n' + chalk.gray('─'.repeat(60)) + '\n');
+      if (continueAnalyzing) {
+        console.log('\n' + chalk.gray('─'.repeat(60)) + '\n');
+      }
     }
-  }
 
-  // Goodbye message
-  console.log('\n' + chalk.green('✓ ¡Gracias por usar SearchBrand!'));
-  console.log(chalk.gray('  Desarrollado por Miguel González\n'));
-  logger.info('CLI session ended by user');
-} catch (error) {
-  logger.error('Fatal error in CLI:', error);
-  console.error(
-    chalk.red('\n❌ Error fatal:'),
-    error instanceof Error ? error.message : 'Unknown error'
-  );
-  process.exit(1);
+    // Goodbye message
+    console.log('\n' + chalk.green('✓ ¡Gracias por usar SearchBrand!'));
+    console.log(chalk.gray('  Desarrollado por Miguel González\n'));
+    logger.info('CLI session ended by user');
+    process.exit(0);
+  } catch (error) {
+    logger.error('Fatal error in CLI:', error);
+    console.error(
+      chalk.red('\n❌ Error fatal:'),
+      error instanceof Error ? error.message : 'Unknown error'
+    );
+    process.exit(1);
+  }
 }
+
+// Run main function
+main();

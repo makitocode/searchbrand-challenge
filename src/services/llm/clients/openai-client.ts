@@ -4,8 +4,8 @@
  */
 
 import OpenAI from 'openai';
-import { config } from '../../../utils/config';
-import { logger } from '../../../utils/logger';
+import { config } from '../../../utils/config.js';
+import { logger } from '../../../utils/logger.js';
 
 export const openaiClient = new OpenAI({
   apiKey: config.openaiApiKey,
