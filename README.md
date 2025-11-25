@@ -1,164 +1,236 @@
-# SearchBrand - Competitor Intelligence Tool
+# SearchBrand - Análisis de Competidores con IA
 
-## Live Demo
+## Demo en Vivo
 
 **[https://searchbrand-challenge-production.up.railway.app/](https://searchbrand-challenge-production.up.railway.app/)**
 
-Automated competitor intelligence tool that identifies relevant competitors for any brand using AI.
+Herramienta automatizada de inteligencia competitiva que identifica competidores relevantes de una marca utilizando inteligencia artificial.
 
-## The Problem
+## El Problema
 
-Marketing Intelligence teams need to identify competitors manually - a process that consumes time and resources. This tool automates that search, handling two distinct scenarios:
+Los equipos de Marketing Intelligence necesitan identificar competidores de forma manual, un proceso que consume tiempo y recursos. Esta herramienta automatiza esa búsqueda, manejando dos escenarios distintos:
 
-### Case A: Global Brands (High Data Availability)
+### Caso A: Marcas Globales (Alta Disponibilidad de Datos)
 
-Established brands with abundant public information available (e.g., Spotify, Nike, Coca-Cola).
+Marcas establecidas con abundante información pública disponible (ej: Spotify, Nike, Coca-Cola).
 
-**Challenge**: Filter noise and avoid false positives amid information overload.
+**Desafío**: Filtrar el ruido y evitar falsos positivos en medio de una sobrecarga de información.
 
-**Expected output**:
-- 3-5 direct competitors
-- Transparent similarity score (0-100%)
-- Technical justification for each match
+**Output esperado**:
+- 3-5 competidores directos
+- Score de similitud transparente (0-100%)
+- Justificación técnica de cada match
 
-### Case B: "Ghost" Brands (Low Data Availability)
+### Caso B: Marcas "Fantasma" (Baja Disponibilidad de Datos)
 
-Niche, local, or very new startup brands with little digital presence (e.g., local vegan bakery, boutique consultancy, specific B2B SaaS).
+Marcas nicho, locales o startups muy nuevas con poca presencia digital (ej: panadería vegana local, consultora boutique, SaaS B2B específico).
 
-**Challenge**: Discover competitors where barely any structured public data exists.
+**Desafío**: Descubrir competidores donde apenas existen datos públicos estructurados.
 
-**Expected output**:
-- 2-3 potential competitors
-- Clear evidence of why they are competitors
+**Output esperado**:
+- 2-3 competidores potenciales
+- Evidencia clara de por qué son competidores
 
-## Challenge Requirements
+## Requerimientos del Challenge
 
-1. **Input**: Brand name or website
-2. **Output**: List of competitors with technical justification
-3. **Deployment**: Cloud platform (Railway, Vercel, Render)
-4. **Database**: Simple integration (Supabase, PostgreSQL)
+1. **Input**: Nombre de marca o sitio web
+2. **Output**: Lista de competidores con justificación técnica
+3. **Despliegue**: Plataforma cloud (Railway)
+4. **Base de datos**: PostgreSQL (Supabase)
 
 ---
 
-## Solution: Claude-Powered Analysis
+## Solución Implementada
 
-This implementation uses **Anthropic Claude** as the single source for intelligent brand analysis. No external scraping APIs, no complex multi-source pipelines - just Claude's knowledge combined with smart caching.
+Esta implementación utiliza **Anthropic Claude** como fuente única para el análisis inteligente de marcas. Sin APIs de scraping externas, sin pipelines complejos multi-fuente - solo el conocimiento de Claude combinado con caching inteligente.
 
-### How It Works
+### Interfaz Web
 
-1. **User enters a brand name** via the web interface
-2. **Claude analyzes the brand** using its pre-trained knowledge
-3. **Results are cached** in PostgreSQL for 7 days
-4. **Subsequent queries** return cached results instantly
+La aplicación incluye una **interfaz web responsive** (mobile-first) servida en el puerto **3000**:
 
-### Performance
+- Diseño moderno con gradientes y animaciones
+- Campo de búsqueda para ingresar marcas
+- Ejemplos clickeables (Spotify, Nike, Coca-Cola, etc.)
+- Visualización de resultados con cards de competidores
+- Indicador de tiempo de procesamiento
+- Soporte completo para móviles y desktop
 
-| Query Type | Response Time |
-|------------|---------------|
-| New brand (first query) | 5-15 seconds |
-| Cached brand | < 100ms |
+### Cómo Funciona
 
-### Analysis Output
+1. **Usuario ingresa una marca** en la interfaz web
+2. **Claude analiza la marca** usando su conocimiento pre-entrenado
+3. **Resultados se cachean** en PostgreSQL por 7 días
+4. **Consultas posteriores** retornan resultados cacheados instantáneamente
 
-For each brand, the system provides:
+### Rendimiento
 
-- **Brand Classification**: Global vs Niche
-- **Industry**: Primary industry/sector
-- **Top 5 Competitors** with:
-  - Similarity score (0-100%)
-  - Detailed reasoning
-  - Key differentiators
+| Tipo de Query | Tiempo de Respuesta |
+|---------------|---------------------|
+| Nueva marca (primera consulta) | 5-15 segundos |
+| Marca cacheada | < 100ms |
 
-```json
-{
-  "brand": "Tesla",
-  "classification": "global",
-  "industry": "Electric Vehicles & Clean Energy",
-  "competitors": [
-    {
-      "name": "Rivian",
-      "similarity": 85,
-      "reasoning": "Direct EV competitor focused on trucks and SUVs..."
-    },
-    {
-      "name": "BYD",
-      "similarity": 82,
-      "reasoning": "Chinese EV manufacturer with global expansion..."
-    }
-  ]
-}
-```
+### Output del Análisis
 
-## Tech Stack
+Para cada marca, el sistema proporciona:
+
+- **Clasificación de marca**: Global vs Nicho
+- **Industria**: Sector principal
+- **Ubicación** (si aplica): Para marcas nicho/locales
+- **Top 5 Competidores** con:
+  - Score de similitud (0-100%)
+  - Evidencias específicas
+
+## Stack Tecnológico
 
 - **Runtime**: Node.js 20+
-- **Language**: TypeScript
-- **AI**: Anthropic Claude (claude-sonnet-4-20250514)
-- **Database**: PostgreSQL (Supabase)
+- **Lenguaje**: TypeScript
+- **IA**: Anthropic Claude (claude-sonnet-4-20250514)
+- **Base de datos**: PostgreSQL (Supabase)
 - **API**: Express.js
-- **Frontend**: Single-page HTML/CSS/JS
-- **Deployment**: Railway (Docker)
-
-## Architecture
-
-```
-searchbrand-challenge/
-├── src/
-│   ├── api/                  # Express REST API
-│   │   ├── controllers/      # Request handlers
-│   │   ├── middleware/       # Auth, error handling
-│   │   ├── routes/           # Route definitions
-│   │   └── server.ts         # Express setup
-│   ├── services/
-│   │   ├── analysis/         # Brand analysis service (Claude)
-│   │   ├── auth/             # JWT authentication
-│   │   └── database/         # PostgreSQL client
-│   └── utils/                # Config, logger
-├── public/                   # Web UI (single page)
-├── database/                 # SQL schemas
-└── Dockerfile                # Production deployment
-```
+- **Frontend**: Single-page HTML/CSS/JS (mobile-first)
+- **Despliegue**: Railway (Docker)
+- **Puerto**: 3000
 
 ## API Endpoints
 
-| Method | Endpoint | Description |
-|--------|----------|-------------|
-| GET | `/health` | Health check |
-| POST | `/api/v1/analysis` | Analyze a brand |
-| GET | `/api/v1/analysis/history` | Get analysis history |
-| GET | `/api/v1/analysis/:id` | Get specific analysis |
+El servidor corre en `http://localhost:3000` (desarrollo) o la URL de Railway (producción).
 
-### Example Request
+### Endpoints Públicos
+
+| Método | Endpoint | Descripción |
+|--------|----------|-------------|
+| GET | `/` | Interfaz web (index.html) |
+| GET | `/health` | Health check del servidor |
+| POST | `/api/v1/analysis/quick` | Análisis rápido de marca (público para demo) |
+
+### Endpoints Protegidos (requieren JWT)
+
+| Método | Endpoint | Descripción |
+|--------|----------|-------------|
+| POST | `/api/v1/auth/login` | Autenticación (obtener JWT) |
+| POST | `/api/v1/analysis` | Crear análisis completo |
+| GET | `/api/v1/analysis/history` | Historial de análisis del usuario |
+| GET | `/api/v1/analysis/:id` | Obtener análisis por ID |
+
+### Ejemplo de Request
 
 ```bash
-curl -X POST https://searchbrand-challenge-production.up.railway.app/api/v1/analysis \
+# Análisis rápido (público)
+curl -X POST http://localhost:3000/api/v1/analysis/quick \
   -H "Content-Type: application/json" \
   -d '{"brand": "Spotify"}'
+
+# Login
+curl -X POST http://localhost:3000/api/v1/auth/login \
+  -H "Content-Type: application/json" \
+  -d '{"email": "user@example.com", "password": "password"}'
+
+# Análisis protegido
+curl -X POST http://localhost:3000/api/v1/analysis \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer YOUR_JWT_TOKEN" \
+  -d '{"brand": "Tesla"}'
+```
+
+### Ejemplo de Response
+
+```json
+{
+  "success": true,
+  "data": {
+    "status": "completed",
+    "brand_name": "Tesla",
+    "brand_type": "global",
+    "industry": "Electric Vehicles & Clean Energy",
+    "competitors": [
+      {
+        "name": "Rivian",
+        "similarityScore": 85,
+        "evidence": [
+          "Fabricante de vehículos eléctricos premium",
+          "Enfoque en trucks y SUVs eléctricos",
+          "Competidor directo en mercado estadounidense"
+        ]
+      },
+      {
+        "name": "BYD",
+        "similarityScore": 82,
+        "evidence": [
+          "Mayor fabricante de EVs del mundo",
+          "Expansión global agresiva",
+          "Competidor en múltiples segmentos"
+        ]
+      }
+    ]
+  }
+}
+```
+
+## Arquitectura
+
+```
+searchbrand-challenge/
+├── public/
+│   └── index.html            # Interfaz web (mobile-first)
+├── src/
+│   ├── api/
+│   │   ├── controllers/      # Handlers de requests
+│   │   │   ├── analysis.controller.ts
+│   │   │   └── auth.controller.ts
+│   │   ├── middleware/       # Auth, rate-limit, error handling
+│   │   ├── routes/           # Definición de rutas
+│   │   │   ├── analysis.routes.ts
+│   │   │   └── auth.routes.ts
+│   │   └── server.ts         # Configuración Express
+│   ├── services/
+│   │   ├── analysis/         # Servicio de análisis (Claude)
+│   │   ├── auth/             # Autenticación JWT
+│   │   └── database/         # Cliente PostgreSQL
+│   ├── utils/                # Config, logger
+│   ├── index.ts              # Entry point API
+│   └── cli.ts                # Entry point CLI (legacy)
+├── database/
+│   ├── schema.sql            # Schema de la BD
+│   └── clean-data.sql        # Script de limpieza
+├── Dockerfile                # Configuración Docker
+└── docker-compose.yml        # PostgreSQL local
 ```
 
 ## Quick Start
 
-See [INSTALL.md](INSTALL.md) for detailed setup instructions.
+Ver [INSTALL.md](INSTALL.md) para instrucciones detalladas.
 
 ```bash
-# Clone and install
+# Clonar e instalar
 git clone <repository-url>
 cd searchbrand-challenge
 npm install
 
-# Configure environment
+# Configurar entorno
 cp .env.example .env
-# Add your ANTHROPIC_API_KEY and DATABASE_URL
+# Agregar ANTHROPIC_API_KEY y DATABASE_URL
 
-# Run locally
+# Ejecutar en desarrollo
 npm run dev
 
-# Open http://localhost:3000
+# Abrir http://localhost:3000
 ```
 
-## Key Design Decisions
+## Comandos Disponibles
 
-1. **Claude-only approach**: Simpler architecture, faster development, reliable results
-2. **Aggressive caching**: 7-day cache reduces API costs and improves UX
-3. **Single-page UI**: Minimal frontend, mobile-first design
-4. **Docker deployment**: Consistent builds across environments
+| Comando | Descripción |
+|---------|-------------|
+| `npm run dev` | Servidor de desarrollo (hot reload) |
+| `npm run build` | Compilar TypeScript |
+| `npm start` | Servidor de producción |
+| `npm run cli` | CLI interactivo (legacy) |
+| `npm run db:start` | Iniciar PostgreSQL local |
+| `npm run db:stop` | Detener PostgreSQL local |
+
+## Decisiones de Diseño
+
+1. **Enfoque Claude-only**: Arquitectura simple, desarrollo rápido, resultados confiables
+2. **Caching agresivo**: Cache de 7 días reduce costos de API y mejora UX
+3. **UI Single-page**: Frontend mínimo, diseño mobile-first
+4. **Docker deployment**: Builds consistentes entre entornos
+5. **Endpoint público `/quick`**: Permite demo sin autenticación
