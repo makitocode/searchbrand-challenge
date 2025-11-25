@@ -24,6 +24,12 @@ router.get(
   analysisController.getHistory.bind(analysisController)
 );
 
+// POST /api/v1/analysis/quick - Quick optimized analysis (public for demo)
+router.post(
+  '/quick',
+  analysisController.quickAnalysis.bind(analysisController)
+);
+
 // GET /api/v1/analysis/:id - Get analysis by ID (protected)
 router.get(
   '/:id',

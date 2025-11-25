@@ -6,6 +6,8 @@
 import { Request, Response, NextFunction } from 'express';
 import { brandAnalysisRepository } from '../../services/database/repositories/brand-analysis.repository.js';
 import { brandAnalysisService } from '../../services/analysis/brand-analysis.service.js';
+import { optimizedBrandAnalysisService } from '../../services/analysis/optimized-brand-analysis.service.js';
+import { simpleBrandAnalysisService } from '../../services/analysis/simple-brand-analysis.service.js';
 import { AppError } from '../middleware/error-handler.js';
 
 export class AnalysisController {
@@ -96,8 +98,8 @@ export class AnalysisController {
         throw new AppError('Not authenticated', 401);
       }
 
-      const limit = parseInt(req.query.limit as string) || 10;
-      const offset = parseInt(req.query.offset as string) || 0;
+      const limit = Number.parseInt(req.query.limit as string) || 10;
+      const offset = Number.parseInt(req.query.offset as string) || 0;
 
       const analyses = await brandAnalysisRepository.getByUserId(
         req.user.userId,
@@ -121,6 +123,33 @@ export class AnalysisController {
           limit,
           offset,
         },
+      });
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  /**
+   * Quick optimized analysis (for demo/testing)
+   * POST /api/v1/analysis/quick
+   */
+  async quickAnalysis(req: Request, res: Response, next: NextFunction): Promise<void> {
+    try {
+      const { brand } = req.body;
+
+      if (!brand) {
+        throw new AppError('Brand is required', 400);
+      }
+
+      // Use simple service (Claude-only) for fastest and most reliable results
+      const result = await simpleBrandAnalysisService.analyze({
+        brand,
+        userId: req.user?.userId,
+      });
+
+      res.json({
+        success: true,
+        data: result,
       });
     } catch (error) {
       next(error);

@@ -6,11 +6,16 @@
 import express, { Application } from 'express';
 // import cors from 'cors';
 // import helmet from 'helmet';
+import path from 'path';
+import { fileURLToPath } from 'url';
 import { config } from '../utils/config.js';
 import { logger } from '../utils/logger.js';
 import { errorHandler } from './middleware/error-handler.js';
 import { requestLogger } from './middleware/request-logger.js';
 import apiRouter from './routes/index.js';
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 
 export function createApp(): Application {
   const app = express();
@@ -49,6 +54,10 @@ export function createApp(): Application {
       environment: config.nodeEnv,
     });
   });
+
+  // Serve static files from public directory
+  const publicPath = path.join(__dirname, '../../public');
+  app.use(express.static(publicPath));
 
   // API routes
   app.use('/api/v1', apiRouter);

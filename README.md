@@ -1,6 +1,10 @@
-# SearchBrand - Competitor Intelligence Tool
+# 🔍 SearchBrand - Análisis de Competidores con IA
 
-Herramienta automatizada de inteligencia competitiva que identifica competidores relevantes de una marca utilizando web scraping, análisis de datos y Large Language Models (LLMs).
+## Demo en Vivo
+
+🚀 **[Ver Demo en Railway](https://searchbrand-challenge.up.railway.app/)**
+
+Herramienta automatizada de inteligencia competitiva que identifica competidores relevantes de una marca utilizando inteligencia artificial.
 
 ## El Problema
 
