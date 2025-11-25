@@ -1,239 +1,148 @@
-# Estrategia de Clasificación: Global vs Nicho
+# Brand Classification Strategy
 
-## Definiciones Claras
+## Overview
 
-### GLOBAL
-Marca con **reconocimiento y operación en múltiples continentes (3+)**
+This document describes how the system classifies brands and identifies competitors using Claude AI.
 
-**Características clave:**
-- Opera y vende en 10+ países
-- Wikipedia en 3+ idiomas
-- Presencia en medios internacionales (BBC, CNN, Reuters, Bloomberg)
-- Millones de seguidores en redes sociales (2M+ combinados)
-- Google Trends muestra interés en 3+ continentes
+## Classification: Global vs Niche
 
-**Ejemplos:** Nike, Coca-Cola, Apple, Real Madrid, Netflix, Spotify
+### Global Brand
 
-### NICHO
-**TODO lo que NO es global**
+A brand with **recognition and operations across multiple continents (3+)**.
 
-Incluye: nacional, regional, local, especializado
+**Characteristics:**
+- Operates in 10+ countries
+- International media coverage
+- Millions of social media followers
+- Recognized worldwide
 
-**Ejemplos:** Atlético Nacional (club local), Bancolombia (banco nacional), Juan Valdez (café colombiano), Herbívoro (restaurante local)
+**Examples:** Nike, Coca-Cola, Apple, Netflix, Spotify, Tesla
 
----
+### Niche Brand
 
-## Fuentes de Datos Prioritarias
+**Everything that is NOT global**.
 
-### 1. Wikipedia (Peso: 25%)
-**Por qué:** Indicador de notabilidad documentada
+Includes: national, regional, local, specialized brands.
 
-**Datos a extraer:**
--  Existe página: Sí/No
--  Número de idiomas disponibles
--  Primer párrafo completo
--  Categorías (buscar: "multinational", "international", "global")
--  Infobox (países de operación, si existe)
+**Examples:** Local restaurants, regional banks, boutique consultancies, specialized B2B services
 
-**Señales GLOBAL:**
-- Wikipedia en **3+ idiomas** (crítico)
-- Categorías internacionales
-- Descripción menciona "global/internacional/mundial"
+## How Classification Works
 
-**Señales NICHO:**
-- No existe Wikipedia
-- Solo 1 idioma
-- Categorías locales ("Empresas de Colombia", "Marcas mexicanas")
+Claude analyzes each brand and determines its classification based on:
 
----
+1. **Geographic reach** - Where does the brand operate?
+2. **Brand recognition** - Is it known internationally?
+3. **Industry presence** - How does it compare to industry leaders?
+4. **Digital footprint** - International vs local online presence
 
-### 2. Google Search (Peso: 20%)
-**Por qué:** Refleja presencia web y alcance geográfico
-
-**Queries estratégicas:**
-```
-1. "[marca]" + "internacional" OR "global"
-2. "[marca]" site:wikipedia.org
-3. "[marca]" + "official" OR "site"
-```
-
-**Datos a extraer (Top 10 resultados):**
-- URLs y dominios (.com, .uk, .br, .mx, .de, etc.)
-- Idiomas de las páginas
-- Tipo de sitios (medios internacionales vs locales)
-- Menciones de presencia internacional
-
-**Señales GLOBAL:**
-- Resultados en múltiples idiomas
-- Dominios de diferentes países
-- Medios internacionales (BBC, CNN, Bloomberg)
-
-**Señales NICHO:**
-- Solo resultados en 1 idioma
-- Solo sitios de 1 país/región
-- Medios exclusivamente locales
-
----
-
-### 3. Google Trends (Peso: 20%)
-**Por qué:** Distribución geográfica real de interés
-
-**Período:** Últimos 12 meses
-
-**Datos a extraer:**
-- Top 10-15 países por interés
-- Distribución por continentes
-- Concentración en país principal (%)
-
-**Señales GLOBAL:**
-- Interés en 3+ continentes
-- Top 10 incluye países de diferentes regiones
-- Distribución amplia (<70% en un solo país)
-
-**Señales NICHO:**
-- Interés concentrado en 1 país (>70%)
-- Solo 1 continente representado
-- Búsquedas muy localizadas
-
----
-
-### 4. Sitio Web Oficial (Peso: 15%)
-**Por qué:** Indica intención y capacidad de operación internacional
-
-**Datos a extraer:**
-- Selector de país/idioma visible
-- Número de idiomas disponibles
-- Múltiples dominios (.com, .mx, .br, etc.)
-- Descripción menciona presencia internacional
-
-**Señales GLOBAL:**
-- 3+ idiomas disponibles
-- Selector de país/región
-- Menciona operación internacional
-
-**Señales NICHO:**
-- Solo 1 idioma
-- Sin selector de país
-- Enfoque local/nacional claro
-
----
-
-### 5. Análisis LLM Directo (Peso: 20%)
-**Por qué:** El LLM posee conocimiento pre-entrenado sobre marcas globales conocidas
-
-**Implementación:**
-Preguntarle directamente a Claude o GPT-5:
+### Classification Prompt
 
 ```
-Prompt:
-"¿Conoces la marca '{brandName}'? Responde en formato JSON con:
+Analyze the brand "{brandName}" and classify it as either GLOBAL or NICHE.
+
+GLOBAL: Operates in multiple continents, internationally recognized
+NICHE: Local, regional, or specialized focus
+
+Return:
+- classification: "global" or "niche"
+- confidence: 0-100
+- reasoning: Brief explanation
+```
+
+## Competitor Identification
+
+Once classified, Claude identifies 5 relevant competitors using different strategies:
+
+### For Global Brands
+
+Claude focuses on:
+- Direct industry competitors at similar scale
+- Companies competing for the same global market
+- Alternative solutions in the same category
+
+### For Niche Brands
+
+Claude focuses on:
+- Local/regional competitors in the same area
+- Similar businesses serving the same audience
+- Companies with comparable offerings and price points
+
+## Competitor Scoring
+
+Each competitor receives a similarity score (0-100%) based on:
+
+| Factor | Weight | Description |
+|--------|--------|-------------|
+| Industry Match | High | Same industry/sector |
+| Business Model | High | Similar revenue model |
+| Target Audience | Medium | Same customer demographic |
+| Geographic Overlap | Medium | Operating in same regions |
+| Price Point | Low | Comparable pricing |
+
+## Example Analysis
+
+### Input: "Tesla"
+
+```json
 {
-  "knows_brand": true/false,
-  "classification": "global" | "local" | "unknown",
-  "confidence": 0-100,
-  "known_countries": ["país1", "país2", ...],
-  "continental_presence": ["continente1", "continente2", ...],
-  "reasoning": "explicación breve"
+  "brand": "Tesla",
+  "classification": "global",
+  "industry": "Electric Vehicles & Clean Energy",
+  "competitors": [
+    {
+      "name": "Rivian",
+      "similarity": 85,
+      "reasoning": "Direct EV competitor, premium segment, US-based"
+    },
+    {
+      "name": "BYD",
+      "similarity": 82,
+      "reasoning": "Global EV manufacturer, competing in multiple markets"
+    },
+    {
+      "name": "Lucid Motors",
+      "similarity": 78,
+      "reasoning": "Luxury EV segment, direct Tesla competitor"
+    }
+  ]
 }
-"
 ```
 
-**Señales GLOBAL:**
-- LLM conoce la marca sin contexto adicional
-- `knows_brand: true` + `confidence > 70%`
-- `known_countries >= 10`
-- `continental_presence >= 3`
+### Input: "Local Coffee Shop"
 
-**Señales NICHO:**
-- LLM no conoce la marca o solo tiene conocimiento local
-- `knows_brand: false` o `confidence < 50%`
-- `known_countries <= 2`
-- `continental_presence <= 1`
-
-**Ventaja clave:**
-- Evita scraping innecesario para marcas universales (Nike, Coca-Cola, Spotify)
-- Puede detectar marcas globales incluso sin Wikipedia en múltiples idiomas
-- Reduce falsos positivos para marcas locales con Wikipedia
-
----
-
-## Sistema de Scoring
-
-### Puntuación (0-100 puntos)
-
-| Fuente | Condición | Puntos |
-|--------|-----------|--------|
-| **Wikipedia** | Existe en 3+ idiomas | +25 |
-| | Existe en 1-2 idiomas | +8 |
-| | Categorías globales | +5 |
-| | No existe | 0 |
-| **Google Search** | Resultados en 3+ idiomas | +12 |
-| | Medios internacionales | +8 |
-| | Dominios multi-país | +5 |
-| **Google Trends** | Interés en 3+ continentes | +15 |
-| | Top 10 multi-región | +10 |
-| **Sitio Web** | 3+ idiomas disponibles | +10 |
-| | Selector de país | +8 |
-| **LLM Directo** | LLM conoce marca (confianza >70%) | +15 |
-| | Presencia 3+ continentes según LLM | +10 |
-| | LLM no conoce o baja confianza | 0 |
-
-### Clasificación Final
-
-```
-Score >= 50 → GLOBAL
-Score < 50  → NICHO
+```json
+{
+  "brand": "Local Coffee Shop",
+  "classification": "niche",
+  "industry": "Food & Beverage - Coffee",
+  "competitors": [
+    {
+      "name": "Nearby independent cafes",
+      "similarity": 90,
+      "reasoning": "Same local market, similar offering"
+    },
+    {
+      "name": "Starbucks (local stores)",
+      "similarity": 70,
+      "reasoning": "Chain competition in the area"
+    }
+  ]
+}
 ```
 
-### Niveles de Confianza
+## Caching Strategy
 
-| Score | Confianza | Descripción |
-|-------|-----------|-------------|
-| 70-100 | ALTA (80-95%) | Evidencia clara y consistente |
-| 40-69 | MEDIA (50-79%) | Evidencia suficiente con matices |
-| 0-39 | BAJA (<50%) | Evidencia insuficiente o contradictoria |
+Results are cached in PostgreSQL for 7 days to:
+- Reduce API costs
+- Improve response times (< 100ms for cached queries)
+- Provide consistent results for the same brand
 
-**Confianza BAJA:** Solicitar contexto adicional al usuario o marcar para revisión manual
+## Why Claude-Only?
 
----
+Previous iterations used multiple data sources (Wikipedia, SerpAPI, Google Trends). The simplified Claude-only approach offers:
 
-## Criterios de Decisión para LLM
-
-**Para clasificar como GLOBAL, debe cumplir AL MENOS 3 de estos:**
-
-- [ ] Wikipedia en 3+ idiomas
-- [ ] Google Trends: interés en 3+ continentes
-- [ ] Sitio web en 3+ idiomas
-- [ ] Medios internacionales cubren la marca
-- [ ] Google Search: resultados en múltiples idiomas/países
-- [ ] LLM conoce la marca con confianza >70% y presencia en 3+ continentes
-
-**Si NO cumple 3+ criterios → NICHO**
-
-**Nota sobre LLM:**
-El análisis directo del LLM sirve como:
-1. **Validación rápida**: Si LLM conoce bien la marca, probablemente es global
-2. **Tie-breaker**: En casos ambiguos (score entre 45-55), el LLM decide
-3. **Justificación final**: Genera explicación humana del razonamiento
-
----
-
-## Consideraciones Especiales
-
-### 1. Equipos Deportivos
-- **GLOBAL:** Fanbase en múltiples continentes, torneos internacionales principales
-- **NICHO:** Club local aunque sea exitoso nacionalmente (ej: Atlético Nacional)
-
-### 2. Empresas B2B
-- Pueden ser GLOBAL aunque consumidor promedio no las conozca
-- Evaluar por operación internacional documentada
-
-### 3. Ambigüedad (palabra común vs marca)
-- Si Google Search muestra ruido significativo
-- Claude detectará esto en FASE 1
-- Si no se resuelve: Confianza < 50%
-
-### 4. Regla de Oro
-**Ante duda razonable → Clasificar como NICHO**
-
-Es mejor subestimar que sobreestimar alcance global
+1. **Simplicity** - Single API, single point of failure
+2. **Speed** - 5-15s vs 30-60s with multiple sources
+3. **Reliability** - No dependency on external scraping APIs
+4. **Quality** - Claude's knowledge is comprehensive for most brands
+5. **Cost** - Fewer API calls, simpler infrastructure
