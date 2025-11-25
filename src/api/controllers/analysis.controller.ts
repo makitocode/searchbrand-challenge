@@ -6,7 +6,6 @@
 import { Request, Response, NextFunction } from 'express';
 import { brandAnalysisRepository } from '../../services/database/repositories/brand-analysis.repository.js';
 import { brandAnalysisService } from '../../services/analysis/brand-analysis.service.js';
-import { optimizedBrandAnalysisService } from '../../services/analysis/optimized-brand-analysis.service.js';
 import { simpleBrandAnalysisService } from '../../services/analysis/simple-brand-analysis.service.js';
 import { AppError } from '../middleware/error-handler.js';
 
