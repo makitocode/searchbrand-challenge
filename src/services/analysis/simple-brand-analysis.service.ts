@@ -43,24 +43,36 @@ export class SimpleBrandAnalysisService {
 
       if (recentAnalysis?.classification_result) {
         logger.info(`Found recent analysis for ${request.brand} in database`);
-        const cached = recentAnalysis.classification_result as {
-          brand_name?: string;
-          brand_type?: 'global' | 'niche';
-          industry?: string;
-          location?: string;
-          competitors?: Array<{
-            name: string;
-            similarityScore: number;
-            evidence: string[];
-          }>;
-        };
+        const cached = recentAnalysis.classification_result as Record<string, any>;
+
+        // Extract industry - handle both object and string formats
+        let industry: string;
+        if (cached.industry_simple) {
+          // Use the simple string version if available (new format)
+          industry = cached.industry_simple;
+        } else if (typeof cached.industry === 'object' && cached.industry?.primary) {
+          // Extract from object format
+          industry = cached.industry.primary;
+        } else if (typeof cached.industry === 'string') {
+          // Direct string format (old format)
+          industry = cached.industry;
+        } else {
+          // Fallback to the main table column
+          industry = recentAnalysis.industry || 'unknown';
+        }
+
+        // Extract brand type
+        const brandType = cached.brand_type ||
+                         cached.brandTypeAnalysis?.type ||
+                         recentAnalysis.analysis_type ||
+                         'niche';
 
         return {
           status: 'completed',
-          brand_name: cached.brand_name || request.brand,
-          brand_type: cached.brand_type || 'niche',
-          industry: cached.industry || 'unknown',
-          location: cached.location,
+          brand_name: cached.brand_name || recentAnalysis.brand_name || request.brand,
+          brand_type: brandType as 'global' | 'niche',
+          industry: industry,
+          location: cached.location || null,
           competitors: cached.competitors || [],
           processing_time_ms: Date.now() - startTime,
         };
@@ -90,24 +102,24 @@ export class SimpleBrandAnalysisService {
 
       // Update with classification result
       if (analysisId) {
-        // Save the analysis result as enriched data
+        // Save as enriched data with the correct format expected by EnrichedBrandData type
+        // The data also includes the simple string versions for easy retrieval
         const enrichedData = {
-          brandTypeAnalysis: {
-            type: analysis.brand_type,
-            score: 85,
-            confidence: 85,
-            reasoning: `Analyzed using Claude AI`,
-            signals: { globalIndicators: 0, nicheIndicators: 0 },
-            breakdown: {},
-          },
+          // Store original simple values
+          brand_name: analysis.brand_name,
+          brand_type: analysis.brand_type,
+          industry: { primary: analysis.industry, secondary: [] },  // Convert to expected format
+          industry_simple: analysis.industry,  // Also store as simple string for easy access
+          location: analysis.location || undefined,
           competitors: analysis.competitors,
-          industry: { primary: analysis.industry, secondary: [] },
+          // Add required fields for EnrichedBrandData type
           businessModel: 'Unknown',
           targetAudience: 'Unknown',
           valueProposition: 'Unknown',
           keywords: [],
         };
 
+        // This method updates the classification_result field in the database
         await brandAnalysisRepository.updateEnrichedData(analysisId, enrichedData);
         await brandAnalysisRepository.updateStatus(analysisId, 'completed');
 
