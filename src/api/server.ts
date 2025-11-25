@@ -55,12 +55,17 @@ export function createApp(): Application {
     });
   });
 
+  // API routes (MUST be before static files to have priority)
+  app.use('/api/v1', apiRouter);
+
   // Serve static files from public directory
   const publicPath = path.join(__dirname, '../../public');
   app.use(express.static(publicPath));
 
-  // API routes
-  app.use('/api/v1', apiRouter);
+  // Serve index.html for root path and any route that doesn't match API
+  app.get('*', (_req, res) => {
+    res.sendFile(path.join(publicPath, 'index.html'));
+  });
 
   // Debug route to list all registered routes
   if (config.nodeEnv !== 'production') {

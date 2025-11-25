@@ -34,6 +34,7 @@ COPY --from=builder /app/dist ./dist
 
 # Copy necessary files
 COPY database ./database
+COPY public ./public
 
 # Expose port (Railway will override this with PORT env var)
 EXPOSE 3000
