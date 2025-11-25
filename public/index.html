@@ -18,39 +18,40 @@
             display: flex;
             align-items: center;
             justify-content: center;
-            padding: 20px;
+            padding: 15px;
         }
 
         .container {
             background: white;
             border-radius: 20px;
             box-shadow: 0 20px 60px rgba(0,0,0,0.3);
-            padding: 40px;
+            padding: 20px;
             max-width: 800px;
             width: 100%;
         }
 
         h1 {
             color: #333;
-            margin-bottom: 10px;
-            font-size: 2.5em;
+            margin-bottom: 8px;
+            font-size: 1.8em;
         }
 
         .subtitle {
             color: #666;
-            margin-bottom: 30px;
-            font-size: 1.1em;
+            margin-bottom: 20px;
+            font-size: 0.95em;
         }
 
         .search-box {
             display: flex;
-            gap: 10px;
-            margin-bottom: 30px;
+            flex-direction: column;
+            gap: 12px;
+            margin-bottom: 25px;
         }
 
         input {
-            flex: 1;
-            padding: 15px 20px;
+            width: 100%;
+            padding: 14px 16px;
             font-size: 16px;
             border: 2px solid #e0e0e0;
             border-radius: 10px;
@@ -63,7 +64,8 @@
         }
 
         button {
-            padding: 15px 30px;
+            width: 100%;
+            padding: 14px 20px;
             background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
             color: white;
             border: none;
@@ -72,6 +74,44 @@
             font-weight: bold;
             cursor: pointer;
             transition: transform 0.2s, box-shadow 0.2s;
+            white-space: nowrap;
+        }
+
+        /* Tablet and desktop styles */
+        @media (min-width: 768px) {
+            body {
+                padding: 20px;
+            }
+
+            .container {
+                padding: 40px;
+            }
+
+            h1 {
+                font-size: 2.5em;
+                margin-bottom: 10px;
+            }
+
+            .subtitle {
+                font-size: 1.1em;
+                margin-bottom: 30px;
+            }
+
+            .search-box {
+                flex-direction: row;
+                gap: 10px;
+                margin-bottom: 30px;
+            }
+
+            input {
+                flex: 1;
+                padding: 15px 20px;
+            }
+
+            button {
+                width: auto;
+                padding: 15px 30px;
+            }
         }
 
         button:hover:not(:disabled) {
