@@ -1,11 +1,13 @@
 /**
  * Simple Brand Analysis Service
  * Ultra-simplified version using ONLY Claude (no external APIs)
- * Perfect for technical test demo
+ * Perfect for technical test demo - WITH DATABASE STORAGE
  */
 
 import { logger } from '../../utils/logger.js';
 import { callClaude } from '../llm/clients/claude-client.js';
+import { brandAnalysisRepository } from '../database/repositories/brand-analysis.repository.js';
+import { competitorRepository } from '../database/repositories/competitor.repository.js';
 
 export interface SimpleAnalysisRequest {
   brand: string;
@@ -28,7 +30,7 @@ export interface SimpleAnalysisResponse {
 
 export class SimpleBrandAnalysisService {
   /**
-   * Main analysis method - using ONLY Claude
+   * Main analysis method - using ONLY Claude WITH DB STORAGE
    */
   async analyze(request: SimpleAnalysisRequest): Promise<SimpleAnalysisResponse> {
     const startTime = Date.now();
@@ -36,11 +38,108 @@ export class SimpleBrandAnalysisService {
     try {
       logger.info(`Starting simple analysis for: ${request.brand}`);
 
-      // Single Claude call to do EVERYTHING
+      // Step 1: Check if we have a recent analysis in DB
+      const recentAnalysis = await brandAnalysisRepository.getRecentByBrandName(request.brand, 7);
+
+      if (recentAnalysis?.classification_result) {
+        logger.info(`Found recent analysis for ${request.brand} in database`);
+        const cached = recentAnalysis.classification_result as {
+          brand_name?: string;
+          brand_type?: 'global' | 'niche';
+          industry?: string;
+          location?: string;
+          competitors?: Array<{
+            name: string;
+            similarityScore: number;
+            evidence: string[];
+          }>;
+        };
+
+        return {
+          status: 'completed',
+          brand_name: cached.brand_name || request.brand,
+          brand_type: cached.brand_type || 'niche',
+          industry: cached.industry || 'unknown',
+          location: cached.location,
+          competitors: cached.competitors || [],
+          processing_time_ms: Date.now() - startTime,
+        };
+      }
+
+      // Step 2: Perform new analysis with Claude
       const analysis = await this.analyzeWithClaude(request.brand);
 
+      // Step 3: Save to database
+      const analysisId = await brandAnalysisRepository.create({
+        user_id: request.userId || null,
+        input_brand: request.brand,
+        input_type: 'brand_name',
+        brand_name: analysis.brand_name,
+        brand_url: undefined,
+        industry: analysis.industry,
+        selected_category: analysis.industry,
+        analysis_type: analysis.brand_type,
+        input_analysis: {
+          brandName: analysis.brand_name,
+          inputType: 'brand_name',
+          isAmbiguous: false,
+          inferredIndustries: [analysis.industry],
+          confidence: 85,
+        },
+      });
+
+      // Update with classification result
+      if (analysisId) {
+        // Save the analysis result as enriched data
+        const enrichedData = {
+          brandTypeAnalysis: {
+            type: analysis.brand_type,
+            score: 85,
+            confidence: 85,
+            reasoning: `Analyzed using Claude AI`,
+            signals: { globalIndicators: 0, nicheIndicators: 0 },
+            breakdown: {},
+          },
+          competitors: analysis.competitors,
+          industry: { primary: analysis.industry, secondary: [] },
+          businessModel: 'Unknown',
+          targetAudience: 'Unknown',
+          valueProposition: 'Unknown',
+          keywords: [],
+        };
+
+        await brandAnalysisRepository.updateEnrichedData(analysisId, enrichedData);
+        await brandAnalysisRepository.updateStatus(analysisId, 'completed');
+
+        // Save competitors
+        if (analysis.competitors && analysis.competitors.length > 0) {
+          await competitorRepository.saveCompetitors(
+            analysisId,
+            analysis.competitors.map((c, index) => ({
+              competitor_name: c.name,
+              competitor_url: undefined,
+              similarity_score: c.similarityScore,
+              ranking: index + 1,
+              score_breakdown: {
+                industry: 15,
+                businessModel: 15,
+                productOffering: 15,
+                targetAudience: 10,
+                geography: 10,
+                marketSize: 10,
+                priceRange: 10,
+                digitalPresence: 5,
+                brandMaturity: 5,
+                keywords: 5,
+              },
+              evidence: c.evidence,
+            }))
+          );
+        }
+      }
+
       const processingTime = Date.now() - startTime;
-      logger.info(`Simple analysis completed in ${processingTime}ms`);
+      logger.info(`Simple analysis completed and saved in ${processingTime}ms`);
 
       return {
         status: 'completed',
