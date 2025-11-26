@@ -83,25 +83,35 @@ export class SimpleBrandAnalysisService {
   }
 
   /**
-   * Try to get official website URL via SerpAPI (non-blocking)
-   * Returns null if it fails - this should never break the main flow
+   * Try to get official website URL via SerpAPI and update DB (fire-and-forget)
+   * This runs asynchronously AFTER Claude analysis completes
+   * Uses Claude's analysis context for smarter search queries
    */
-  private async tryGetOfficialWebsite(brandName: string): Promise<string | null> {
+  private async tryGetOfficialWebsiteAndUpdateDB(
+    analysisId: string,
+    brandName: string,
+    context: {
+      industry?: string;
+      location?: string;
+      brandType?: 'global' | 'niche';
+    }
+  ): Promise<void> {
     try {
-      logger.info(`SerpAPI: Looking up official website for "${brandName}"`);
-      const result = await googleSearchService.getOfficialWebsite(brandName);
+      logger.info(`SerpAPI (async): Looking up official website for "${brandName}" with context: ${JSON.stringify(context)}`);
+      const result = await googleSearchService.getOfficialWebsite(brandName, context);
 
       if (result) {
         logger.info(`SerpAPI SUCCESS: Found official website ${result.url} (confidence: ${result.confidence}, source: ${result.source})`);
-        return result.url;
-      }
 
-      logger.info(`SerpAPI: No official website found for "${brandName}"`);
-      return null;
+        // Update the database with the found URL
+        await brandAnalysisRepository.updateBrandUrl(analysisId, result.url);
+        logger.info(`SerpAPI: Updated brand_url in DB for analysis ${analysisId}`);
+      } else {
+        logger.info(`SerpAPI: No official website found for "${brandName}"`);
+      }
     } catch (error) {
-      // This should NEVER break the main flow
-      logger.warn(`SerpAPI FAILED for "${brandName}":`, error instanceof Error ? error.message : 'Unknown error');
-      return null;
+      // This should NEVER break anything - it's fire-and-forget
+      logger.warn(`SerpAPI (async) FAILED for "${brandName}":`, error instanceof Error ? error.message : 'Unknown error');
     }
   }
 
@@ -202,30 +212,15 @@ export class SimpleBrandAnalysisService {
         websiteContext = await this.fetchWebsiteContext(parsedInput.normalizedUrl);
       }
 
-      // Step 3: Perform analysis with Claude AND try to get official URL via SerpAPI (in parallel)
-      // For URL inputs: we already have the URL, just analyze
-      // For brand name inputs: try to get official URL while Claude analyzes
-      let analysis: Omit<SimpleAnalysisResponse, 'status' | 'processing_time_ms'>;
-      let officialUrl: string | null = null;
-
-      if (parsedInput.isUrl) {
-        // URL provided - just analyze with Claude
-        analysis = await this.analyzeWithClaude(request.brand, parsedInput, websiteContext);
-      } else {
-        // Brand name provided - run Claude analysis and SerpAPI lookup in parallel
-        const [claudeResult, serpApiResult] = await Promise.all([
-          this.analyzeWithClaude(request.brand, parsedInput, websiteContext),
-          this.tryGetOfficialWebsite(request.brand),
-        ]);
-        analysis = claudeResult;
-        officialUrl = serpApiResult;
-      }
+      // Step 3: Perform analysis with Claude (always first - user gets fast response)
+      const analysis = await this.analyzeWithClaude(request.brand, parsedInput, websiteContext);
 
       // Normalize brand_name to lowercase for DB storage (UI will capitalize for display)
       const normalizedBrandName = analysis.brand_name.toLowerCase().trim();
 
-      // Determine the brand URL to store (user-provided URL takes priority, then SerpAPI result)
-      const brandUrl = parsedInput.isUrl ? parsedInput.normalizedUrl : officialUrl || undefined;
+      // Determine the brand URL to store (user-provided URL only for now)
+      // For brand name inputs, SerpAPI will update this asynchronously after DB save
+      const brandUrl = parsedInput.isUrl ? parsedInput.normalizedUrl : undefined;
 
       // Step 3: Save to database
       const analysisId = await brandAnalysisRepository.create({
@@ -294,6 +289,20 @@ export class SimpleBrandAnalysisService {
               evidence: c.evidence,
             }))
           );
+        }
+
+        // Step 4: For brand name inputs (not URLs), trigger async SerpAPI lookup
+        // This runs in background - user doesn't wait for it
+        if (!parsedInput.isUrl) {
+          // Fire-and-forget: don't await, just trigger the async update
+          this.tryGetOfficialWebsiteAndUpdateDB(analysisId, analysis.brand_name, {
+            industry: analysis.industry,
+            location: analysis.location || undefined,
+            brandType: analysis.brand_type,
+          }).catch(err => {
+            // Log but don't throw - this is truly fire-and-forget
+            logger.debug('Async SerpAPI lookup error (non-blocking):', err);
+          });
         }
       }
 

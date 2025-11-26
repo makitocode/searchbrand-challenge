@@ -515,6 +515,60 @@ export class BrandAnalysisRepository {
       return false;
     }
   }
+
+  /**
+   * Update brand_url for an existing analysis (used by async SerpAPI lookup)
+   */
+  async updateBrandUrl(id: string, brandUrl: string): Promise<boolean> {
+    if (!(await isDatabaseAvailable())) {
+      return false;
+    }
+
+    const mode = getDatabaseMode();
+
+    try {
+      if (mode === 'local') {
+        const pool = getPgPool();
+        if (!pool) return false;
+
+        const result = await pool.query(
+          `UPDATE brand_analyses
+           SET brand_url = $1, updated_at = NOW()
+           WHERE id = $2`,
+          [brandUrl, id]
+        );
+
+        if ((result.rowCount || 0) === 0) {
+          logger.warn(`Failed to update brand_url: Analysis ${id} not found`);
+          return false;
+        }
+
+        return true;
+      }
+
+      if (mode === 'supabase') {
+        const supabase = getSupabaseClient();
+        if (!supabase) return false;
+
+        const { error } = await supabase
+          .from('brand_analyses')
+          .update({ brand_url: brandUrl, updated_at: new Date().toISOString() })
+          .eq('id', id);
+
+        if (error) {
+          logger.warn('Failed to update brand_url:', error);
+          return false;
+        }
+
+        return true;
+      }
+
+      return false;
+    } catch (error) {
+      logger.warn('Failed to update brand_url:', error);
+      return false;
+    }
+  }
 }
 
 // Export singleton instance
