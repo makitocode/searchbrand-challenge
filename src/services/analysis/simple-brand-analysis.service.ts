@@ -12,6 +12,7 @@ import { competitorRepository } from '../database/repositories/competitor.reposi
 export interface SimpleAnalysisRequest {
   brand: string;
   userId?: string;
+  forceRefresh?: boolean;
 }
 
 export interface SimpleAnalysisResponse {
@@ -26,6 +27,7 @@ export interface SimpleAnalysisResponse {
     evidence: string[];
   }>;
   processing_time_ms: number;
+  fromCache?: boolean;
 }
 
 export class SimpleBrandAnalysisService {
@@ -38,12 +40,17 @@ export class SimpleBrandAnalysisService {
     try {
       logger.info(`Starting simple analysis for: ${request.brand}`);
 
-      // Step 1: Check if we have a recent analysis in DB
-      const recentAnalysis = await brandAnalysisRepository.getRecentByBrandName(request.brand, 7);
+      // Step 1: Check cache or delete existing record if forceRefresh
+      const existingAnalysis = await brandAnalysisRepository.getRecentByBrandName(request.brand, 7);
 
-      if (recentAnalysis?.classification_result) {
+      if (request.forceRefresh && existingAnalysis) {
+        // Delete existing record before creating new one
+        logger.info(`Force refresh: deleting existing analysis for ${request.brand}`);
+        await brandAnalysisRepository.delete(existingAnalysis.id);
+      } else if (existingAnalysis?.classification_result) {
+        // Return cached result
         logger.info(`Found recent analysis for ${request.brand} in database`);
-        const cached = recentAnalysis.classification_result as Record<string, any>;
+        const cached = existingAnalysis.classification_result as Record<string, any>;
 
         // Extract industry - handle both object and string formats
         let industry: string;
@@ -58,41 +65,45 @@ export class SimpleBrandAnalysisService {
           industry = cached.industry;
         } else {
           // Fallback to the main table column
-          industry = recentAnalysis.industry || 'unknown';
+          industry = existingAnalysis.industry || 'unknown';
         }
 
         // Extract brand type
         const brandType = cached.brand_type ||
                          cached.brandTypeAnalysis?.type ||
-                         recentAnalysis.analysis_type ||
+                         existingAnalysis.analysis_type ||
                          'niche';
 
         return {
           status: 'completed',
-          brand_name: cached.brand_name || recentAnalysis.brand_name || request.brand,
+          brand_name: cached.brand_name || existingAnalysis.brand_name || request.brand,
           brand_type: brandType as 'global' | 'niche',
           industry: industry,
           location: cached.location || null,
           competitors: cached.competitors || [],
           processing_time_ms: Date.now() - startTime,
+          fromCache: true,
         };
       }
 
       // Step 2: Perform new analysis with Claude
       const analysis = await this.analyzeWithClaude(request.brand);
 
+      // Normalize brand_name to lowercase for DB storage (UI will capitalize for display)
+      const normalizedBrandName = analysis.brand_name.toLowerCase().trim();
+
       // Step 3: Save to database
       const analysisId = await brandAnalysisRepository.create({
         user_id: request.userId || null,
-        input_brand: request.brand,
+        input_brand: request.brand.toLowerCase().trim(),
         input_type: 'brand_name',
-        brand_name: analysis.brand_name,
+        brand_name: normalizedBrandName,
         brand_url: undefined,
         industry: analysis.industry,
         selected_category: analysis.industry,
         analysis_type: analysis.brand_type,
         input_analysis: {
-          brandName: analysis.brand_name,
+          brandName: normalizedBrandName,
           inputType: 'brand_name',
           isAmbiguous: false,
           inferredIndustries: [analysis.industry],
@@ -105,8 +116,8 @@ export class SimpleBrandAnalysisService {
         // Save as enriched data with the correct format expected by EnrichedBrandData type
         // The data also includes the simple string versions for easy retrieval
         const enrichedData = {
-          // Store original simple values
-          brand_name: analysis.brand_name,
+          // Store normalized (lowercase) values
+          brand_name: normalizedBrandName,
           brand_type: analysis.brand_type,
           industry: { primary: analysis.industry, secondary: [] },  // Convert to expected format
           industry_simple: analysis.industry,  // Also store as simple string for easy access

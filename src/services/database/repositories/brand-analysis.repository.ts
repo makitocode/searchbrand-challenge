@@ -269,7 +269,8 @@ export class BrandAnalysisRepository {
   }
 
   /**
-   * Get recent analysis by normalized brand name (to avoid duplicates)
+   * Get recent analysis by normalized brand name or input_brand (to avoid duplicates)
+   * Searches both brand_name (cleaned name from Claude) and input_brand (user input)
    */
   async getRecentByBrandName(brandName: string, maxAgeDays: number = 7): Promise<BrandAnalysis | null> {
     if (!(await isDatabaseAvailable())) {
@@ -284,9 +285,10 @@ export class BrandAnalysisRepository {
         const pool = getPgPool();
         if (!pool) return null;
 
+        // Search by both brand_name AND input_brand to catch duplicates
         const result = await pool.query(
           `SELECT * FROM brand_analyses
-           WHERE LOWER(brand_name) = $1
+           WHERE (LOWER(brand_name) = $1 OR LOWER(input_brand) = $1)
            AND status = 'completed'
            AND created_at > NOW() - INTERVAL '${maxAgeDays} days'
            ORDER BY created_at DESC
@@ -308,7 +310,8 @@ export class BrandAnalysisRepository {
         const cutoffDate = new Date();
         cutoffDate.setDate(cutoffDate.getDate() - maxAgeDays);
 
-        const { data, error } = await supabase
+        // Search by brand_name first
+        let { data, error } = await supabase
           .from('brand_analyses')
           .select('*')
           .ilike('brand_name', normalizedBrand)
@@ -317,6 +320,22 @@ export class BrandAnalysisRepository {
           .order('created_at', { ascending: false })
           .limit(1)
           .single();
+
+        // If not found by brand_name, try input_brand
+        if (error && error.code === 'PGRST116') {
+          const result = await supabase
+            .from('brand_analyses')
+            .select('*')
+            .ilike('input_brand', normalizedBrand)
+            .eq('status', 'completed')
+            .gt('created_at', cutoffDate.toISOString())
+            .order('created_at', { ascending: false })
+            .limit(1)
+            .single();
+
+          data = result.data;
+          error = result.error;
+        }
 
         if (error) {
           if (error.code === 'PGRST116') {
