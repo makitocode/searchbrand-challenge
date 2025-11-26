@@ -8,6 +8,9 @@ import { logger } from '../../utils/logger.js';
 import { callClaude } from '../llm/clients/claude-client.js';
 import { brandAnalysisRepository } from '../database/repositories/brand-analysis.repository.js';
 import { competitorRepository } from '../database/repositories/competitor.repository.js';
+import { looksLikeUrl, extractDomainInfo, normalizeUrl } from '../../utils/validators.js';
+import { webMetadataService } from '../scraping/web-metadata.service.js';
+import { googleSearchService } from '../scraping/google-search.service.js';
 
 export interface SimpleAnalysisRequest {
   brand: string;
@@ -21,6 +24,7 @@ export interface SimpleAnalysisResponse {
   brand_type: 'global' | 'niche';
   industry: string;
   location?: string;
+  brand_url?: string;
   competitors: Array<{
     name: string;
     similarityScore: number;
@@ -30,7 +34,103 @@ export interface SimpleAnalysisResponse {
   fromCache?: boolean;
 }
 
+interface ParsedInput {
+  isUrl: boolean;
+  originalInput: string;
+  normalizedUrl?: string;
+  domain?: string;
+  brandHint?: string;
+  tld?: string;
+}
+
+interface WebsiteContext {
+  title?: string;
+  description?: string;
+  keywords?: string[];
+  fetchSuccess: boolean;
+}
+
 export class SimpleBrandAnalysisService {
+  /**
+   * Fetch website metadata for URL inputs
+   * Returns context to help Claude understand what the website is about
+   */
+  private async fetchWebsiteContext(url: string): Promise<WebsiteContext> {
+    try {
+      logger.info(`Fetching website metadata from: ${url}`);
+      const metadata = await webMetadataService.extractMetadata(url);
+
+      const hasUsefulData = !!(metadata.title || metadata.description || (metadata.keywords && metadata.keywords.length > 0));
+
+      if (hasUsefulData) {
+        logger.info(`Website metadata fetch SUCCESS: title="${metadata.title}", keywords=${metadata.keywords?.length || 0}`);
+      } else {
+        logger.warn(`Website metadata fetch returned no useful data for: ${url}`);
+      }
+
+      return {
+        title: metadata.title,
+        description: metadata.description,
+        keywords: metadata.keywords,
+        fetchSuccess: hasUsefulData,
+      };
+    } catch (error) {
+      logger.error(`Website metadata fetch FAILED for ${url}:`, error instanceof Error ? error.message : 'Unknown error');
+      return {
+        fetchSuccess: false,
+      };
+    }
+  }
+
+  /**
+   * Try to get official website URL via SerpAPI (non-blocking)
+   * Returns null if it fails - this should never break the main flow
+   */
+  private async tryGetOfficialWebsite(brandName: string): Promise<string | null> {
+    try {
+      logger.info(`SerpAPI: Looking up official website for "${brandName}"`);
+      const result = await googleSearchService.getOfficialWebsite(brandName);
+
+      if (result) {
+        logger.info(`SerpAPI SUCCESS: Found official website ${result.url} (confidence: ${result.confidence}, source: ${result.source})`);
+        return result.url;
+      }
+
+      logger.info(`SerpAPI: No official website found for "${brandName}"`);
+      return null;
+    } catch (error) {
+      // This should NEVER break the main flow
+      logger.warn(`SerpAPI FAILED for "${brandName}":`, error instanceof Error ? error.message : 'Unknown error');
+      return null;
+    }
+  }
+
+  /**
+   * Parse and detect input type (URL vs brand name)
+   */
+  private parseInput(input: string): ParsedInput {
+    const trimmed = input.trim();
+
+    if (looksLikeUrl(trimmed)) {
+      const domainInfo = extractDomainInfo(trimmed);
+      if (domainInfo) {
+        return {
+          isUrl: true,
+          originalInput: trimmed,
+          normalizedUrl: normalizeUrl(trimmed),
+          domain: domainInfo.domain,
+          brandHint: domainInfo.brandHint,
+          tld: domainInfo.tld,
+        };
+      }
+    }
+
+    return {
+      isUrl: false,
+      originalInput: trimmed,
+    };
+  }
+
   /**
    * Main analysis method - using ONLY Claude WITH DB STORAGE
    */
@@ -38,10 +138,19 @@ export class SimpleBrandAnalysisService {
     const startTime = Date.now();
 
     try {
-      logger.info(`Starting simple analysis for: ${request.brand}`);
+      // Parse input to detect if it's a URL
+      const parsedInput = this.parseInput(request.brand);
+
+      if (parsedInput.isUrl) {
+        logger.info(`Detected URL input: ${parsedInput.domain} (brand hint: ${parsedInput.brandHint})`);
+      } else {
+        logger.info(`Starting simple analysis for brand: ${request.brand}`);
+      }
 
       // Step 1: Check cache or delete existing record if forceRefresh
-      const existingAnalysis = await brandAnalysisRepository.getRecentByBrandName(request.brand, 7);
+      // For URLs, search by domain to catch variations (bendita.cl, www.bendita.cl, etc.)
+      const cacheKey = parsedInput.isUrl ? parsedInput.domain! : request.brand;
+      const existingAnalysis = await brandAnalysisRepository.getRecentByBrandName(cacheKey, 7);
 
       if (request.forceRefresh && existingAnalysis) {
         // Delete existing record before creating new one
@@ -80,31 +189,57 @@ export class SimpleBrandAnalysisService {
           brand_type: brandType as 'global' | 'niche',
           industry: industry,
           location: cached.location || null,
+          brand_url: cached.brand_url || existingAnalysis.brand_url || undefined,
           competitors: cached.competitors || [],
           processing_time_ms: Date.now() - startTime,
           fromCache: true,
         };
       }
 
-      // Step 2: Perform new analysis with Claude
-      const analysis = await this.analyzeWithClaude(request.brand);
+      // Step 2: For URLs, fetch website metadata to provide context to Claude
+      let websiteContext: WebsiteContext | undefined;
+      if (parsedInput.isUrl && parsedInput.normalizedUrl) {
+        websiteContext = await this.fetchWebsiteContext(parsedInput.normalizedUrl);
+      }
+
+      // Step 3: Perform analysis with Claude AND try to get official URL via SerpAPI (in parallel)
+      // For URL inputs: we already have the URL, just analyze
+      // For brand name inputs: try to get official URL while Claude analyzes
+      let analysis: Omit<SimpleAnalysisResponse, 'status' | 'processing_time_ms'>;
+      let officialUrl: string | null = null;
+
+      if (parsedInput.isUrl) {
+        // URL provided - just analyze with Claude
+        analysis = await this.analyzeWithClaude(request.brand, parsedInput, websiteContext);
+      } else {
+        // Brand name provided - run Claude analysis and SerpAPI lookup in parallel
+        const [claudeResult, serpApiResult] = await Promise.all([
+          this.analyzeWithClaude(request.brand, parsedInput, websiteContext),
+          this.tryGetOfficialWebsite(request.brand),
+        ]);
+        analysis = claudeResult;
+        officialUrl = serpApiResult;
+      }
 
       // Normalize brand_name to lowercase for DB storage (UI will capitalize for display)
       const normalizedBrandName = analysis.brand_name.toLowerCase().trim();
+
+      // Determine the brand URL to store (user-provided URL takes priority, then SerpAPI result)
+      const brandUrl = parsedInput.isUrl ? parsedInput.normalizedUrl : officialUrl || undefined;
 
       // Step 3: Save to database
       const analysisId = await brandAnalysisRepository.create({
         user_id: request.userId || null,
         input_brand: request.brand.toLowerCase().trim(),
-        input_type: 'brand_name',
+        input_type: parsedInput.isUrl ? 'url' : 'brand_name',
         brand_name: normalizedBrandName,
-        brand_url: undefined,
+        brand_url: brandUrl,
         industry: analysis.industry,
         selected_category: analysis.industry,
         analysis_type: analysis.brand_type,
         input_analysis: {
           brandName: normalizedBrandName,
-          inputType: 'brand_name',
+          inputType: parsedInput.isUrl ? 'url' : 'brand_name',
           isAmbiguous: false,
           inferredIndustries: [analysis.industry],
           confidence: 85,
@@ -119,6 +254,7 @@ export class SimpleBrandAnalysisService {
           // Store normalized (lowercase) values
           brand_name: normalizedBrandName,
           brand_type: analysis.brand_type,
+          brand_url: brandUrl,
           industry: { primary: analysis.industry, secondary: [] },  // Convert to expected format
           industry_simple: analysis.industry,  // Also store as simple string for easy access
           location: analysis.location || undefined,
@@ -167,6 +303,7 @@ export class SimpleBrandAnalysisService {
       return {
         status: 'completed',
         ...analysis,
+        brand_url: brandUrl,
         processing_time_ms: processingTime,
       };
     } catch (error) {
@@ -183,10 +320,71 @@ export class SimpleBrandAnalysisService {
   }
 
   /**
-   * Single Claude call to analyze everything
+   * Build the appropriate prompt based on input type
    */
-  private async analyzeWithClaude(brandInput: string): Promise<Omit<SimpleAnalysisResponse, 'status' | 'processing_time_ms'>> {
-    const prompt = `Analyze the brand "${brandInput}" and provide comprehensive competitive intelligence.
+  private buildPrompt(brandInput: string, parsedInput: ParsedInput, websiteContext?: WebsiteContext): string {
+    if (parsedInput.isUrl) {
+      // Build website context section if we have real data from the website
+      let websiteDataSection = '';
+      if (websiteContext?.fetchSuccess) {
+        websiteDataSection = `
+REAL DATA FROM THE WEBSITE (USE THIS AS PRIMARY SOURCE):
+- Website Title: "${websiteContext.title || 'N/A'}"
+- Website Description: "${websiteContext.description || 'N/A'}"
+- Keywords found: ${websiteContext.keywords?.slice(0, 10).join(', ') || 'N/A'}
+
+THIS IS THE ACTUAL DATA FROM THE WEBSITE. Use it to determine the real industry and business type.
+`;
+      }
+
+      // URL-specific prompt - emphasizes the website as the primary reference
+      return `Analyze the brand with website "${parsedInput.domain}" and provide comprehensive competitive intelligence.
+
+CRITICAL CONTEXT:
+- The user provided the URL/domain: ${parsedInput.domain}
+- This is the OFFICIAL website of the brand we're analyzing
+- The brand name is likely "${parsedInput.brandHint}" but verify based on the domain
+- Country hint from TLD: .${parsedInput.tld} (e.g., .cl = Chile, .co = Colombia, .com = International)
+${websiteDataSection}
+Your task:
+1. Identify the exact brand name from this website/domain
+2. Classify as "global" (Nike, Spotify, Coca-Cola) or "niche" (local restaurant, boutique shop)
+3. Identify the industry/category based on what this website offers
+4. If niche, identify the location (use TLD hint: .${parsedInput.tld})
+5. List 3-5 direct competitors with similarity scores
+
+IMPORTANT - DISAMBIGUATION:
+- There may be multiple brands with similar names (e.g., "bendita.cl" vs "bendita.co" are DIFFERENT brands)
+- Focus ONLY on the brand at ${parsedInput.domain}
+- Find competitors that compete with THIS specific brand in THIS specific market
+- USE THE WEBSITE DATA ABOVE to determine the correct industry (don't guess based on the name alone)
+
+Respond ONLY with valid JSON in this exact format:
+{
+  "brand_name": "exact brand name from the website",
+  "brand_type": "global" or "niche",
+  "industry": "specific category (e.g., 'Beauty & Skincare' not just 'Retail')",
+  "location": "city, country" or null,
+  "competitors": [
+    {
+      "name": "Competitor Name",
+      "similarityScore": 85,
+      "evidence": [
+        "Same target market",
+        "Similar product offering"
+      ]
+    }
+  ]
+}
+
+Examples:
+- bendita.cl (Chilean beauty brand) → competitors: The Body Shop Chile, L'Occitane Chile, local Chilean beauty brands
+- bendita.co (Colombian fashion brand) → competitors: Colombian fashion retailers, Zara Colombia, local boutiques
+- nike.com → competitors: Adidas, Puma, Under Armour, New Balance`;
+    }
+
+    // Standard brand name prompt
+    return `Analyze the brand "${brandInput}" and provide comprehensive competitive intelligence.
 
 Your task:
 1. Identify the exact brand name (cleaned)
@@ -223,6 +421,13 @@ Examples:
 - Spotify → competitors: Apple Music, YouTube Music, Amazon Music, Pandora
 - Local coffee shop in Bogotá → competitors: Juan Valdez Café, Starbucks Colombia, Café Quindío
 - Nike → competitors: Adidas, Puma, Under Armour, New Balance`;
+  }
+
+  /**
+   * Single Claude call to analyze everything
+   */
+  private async analyzeWithClaude(brandInput: string, parsedInput: ParsedInput, websiteContext?: WebsiteContext): Promise<Omit<SimpleAnalysisResponse, 'status' | 'processing_time_ms'>> {
+    const prompt = this.buildPrompt(brandInput, parsedInput, websiteContext);
 
     try {
       const response = await callClaude(prompt, 'You are a competitive intelligence analyst. Respond only with valid JSON.');
