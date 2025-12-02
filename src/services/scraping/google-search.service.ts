@@ -1428,6 +1428,170 @@ IMPORTANTE:
 
     return undefined;
   }
+
+  /**
+   * Quick lookup to find official website URL for a brand
+   * Uses Knowledge Graph (most reliable) + first organic result fallback
+   * Returns null on any failure - non-blocking
+   *
+   * @param brandName - The brand name to search for
+   * @param context - Optional context from Claude analysis to improve search accuracy
+   */
+  async getOfficialWebsite(
+    brandName: string,
+    context?: {
+      industry?: string;
+      location?: string;
+      brandType?: 'global' | 'niche';
+    }
+  ): Promise<{
+    url: string;
+    confidence: 'high' | 'medium' | 'low';
+    source: 'knowledge_graph' | 'organic_result';
+  } | null> {
+    const apiKey = process.env.SERP_API_KEY;
+    if (!apiKey) {
+      logger.debug('SERP_API_KEY not configured - skipping official website lookup');
+      return null;
+    }
+
+    try {
+      // Build contextual search query for better results
+      let searchQuery = `"${brandName}"`;
+      let countryCode = 'us';
+      let language = 'en';
+
+      if (context) {
+        // For niche brands, add industry and location context
+        if (context.brandType === 'niche') {
+          if (context.industry) {
+            searchQuery += ` ${context.industry}`;
+          }
+          if (context.location) {
+            searchQuery += ` ${context.location}`;
+            // Adjust country code based on location
+            const locationLower = context.location.toLowerCase();
+            if (locationLower.includes('colombia')) {
+              countryCode = 'co';
+              language = 'es';
+            } else if (locationLower.includes('chile')) {
+              countryCode = 'cl';
+              language = 'es';
+            } else if (locationLower.includes('argentina')) {
+              countryCode = 'ar';
+              language = 'es';
+            } else if (locationLower.includes('mexico') || locationLower.includes('méxico')) {
+              countryCode = 'mx';
+              language = 'es';
+            } else if (locationLower.includes('spain') || locationLower.includes('españa')) {
+              countryCode = 'es';
+              language = 'es';
+            }
+          }
+          // Add "sitio oficial" for Spanish searches to prioritize official sites
+          if (language === 'es') {
+            searchQuery += ' sitio oficial';
+          } else {
+            searchQuery += ' official website';
+          }
+        }
+      }
+
+      logger.info(`SerpAPI: Searching with query: "${searchQuery}" (country: ${countryCode}, lang: ${language})`);
+
+      const response = await getJson({
+        engine: 'google',
+        q: searchQuery,
+        api_key: apiKey,
+        num: 5, // We only need the first few results
+        gl: countryCode,
+        hl: language,
+      });
+
+      // Strategy 1: Knowledge Graph (highest confidence)
+      if (response.knowledge_graph?.website) {
+        logger.info(`SerpAPI: Found website in Knowledge Graph: ${response.knowledge_graph.website}`);
+        return {
+          url: response.knowledge_graph.website,
+          confidence: 'high',
+          source: 'knowledge_graph',
+        };
+      }
+
+      // Log if Knowledge Graph exists but has no website
+      if (response.knowledge_graph) {
+        logger.debug(`SerpAPI: Knowledge Graph found for "${brandName}" but no website field (type: ${response.knowledge_graph.type || 'unknown'})`);
+      } else {
+        logger.debug(`SerpAPI: No Knowledge Graph found for "${brandName}"`);
+      }
+
+      // Strategy 2: First organic result that's NOT a social/directory site
+      const excludedDomains = [
+        'wikipedia.org',
+        'facebook.com',
+        'instagram.com',
+        'linkedin.com',
+        'twitter.com',
+        'x.com',
+        'youtube.com',
+        'yelp.com',
+        'tripadvisor.com',
+        'glassdoor.com',
+        'crunchbase.com',
+        'bloomberg.com',
+        'forbes.com',
+        'amazon.com',
+      ];
+
+      const organicResults = response.organic_results || [];
+      logger.debug(`SerpAPI: Found ${organicResults.length} organic results for "${brandName}"`);
+
+      for (const result of organicResults) {
+        const url = result.link || '';
+        if (!url) continue;
+
+        try {
+          const urlObj = new URL(url);
+          const domain = urlObj.hostname.replace('www.', '').toLowerCase();
+
+          // Skip excluded domains
+          if (excludedDomains.some(excluded => domain.includes(excluded))) {
+            logger.debug(`SerpAPI: Skipping excluded domain: ${domain}`);
+            continue;
+          }
+
+          // Check if domain contains brand name (higher confidence)
+          const brandLower = brandName.toLowerCase().replaceAll(/\s+/g, '');
+          const domainCore = domain.split('.')[0];
+          const containsBrand = domainCore.includes(brandLower) || brandLower.includes(domainCore);
+
+          logger.info(`SerpAPI: Found website from organic results: ${url} (confidence: ${containsBrand ? 'medium' : 'low'})`);
+
+          return {
+            url: url,
+            confidence: containsBrand ? 'medium' : 'low',
+            source: 'organic_result',
+          };
+        } catch {
+          continue;
+        }
+      }
+
+      // Log why no website was found
+      if (organicResults.length === 0) {
+        logger.info(`SerpAPI: No organic results returned for "${brandName}" - brand may be too obscure or query issue`);
+      } else {
+        logger.info(`SerpAPI: All ${organicResults.length} organic results were excluded (social/directory sites) for "${brandName}"`);
+      }
+      return null;
+    } catch (error) {
+      // Log the actual error for debugging
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+      const errorCode = (error as any)?.response?.status || (error as any)?.code || 'N/A';
+      logger.warn(`SerpAPI ERROR for "${brandName}": ${errorMessage} (code: ${errorCode})`);
+      return null;
+    }
+  }
 }
 
 // Export singleton instance

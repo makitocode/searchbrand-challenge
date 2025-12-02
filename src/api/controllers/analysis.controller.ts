@@ -134,7 +134,7 @@ export class AnalysisController {
    */
   async quickAnalysis(req: Request, res: Response, next: NextFunction): Promise<void> {
     try {
-      const { brand } = req.body;
+      const { brand, forceRefresh } = req.body;
 
       if (!brand) {
         throw new AppError('Brand is required', 400);
@@ -144,6 +144,7 @@ export class AnalysisController {
       const result = await simpleBrandAnalysisService.analyze({
         brand,
         userId: req.user?.userId,
+        forceRefresh: forceRefresh === true,
       });
 
       res.json({

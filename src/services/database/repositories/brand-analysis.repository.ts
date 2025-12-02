@@ -269,7 +269,8 @@ export class BrandAnalysisRepository {
   }
 
   /**
-   * Get recent analysis by normalized brand name (to avoid duplicates)
+   * Get recent analysis by normalized brand name or input_brand (to avoid duplicates)
+   * Searches both brand_name (cleaned name from Claude) and input_brand (user input)
    */
   async getRecentByBrandName(brandName: string, maxAgeDays: number = 7): Promise<BrandAnalysis | null> {
     if (!(await isDatabaseAvailable())) {
@@ -284,9 +285,10 @@ export class BrandAnalysisRepository {
         const pool = getPgPool();
         if (!pool) return null;
 
+        // Search by both brand_name AND input_brand to catch duplicates
         const result = await pool.query(
           `SELECT * FROM brand_analyses
-           WHERE LOWER(brand_name) = $1
+           WHERE (LOWER(brand_name) = $1 OR LOWER(input_brand) = $1)
            AND status = 'completed'
            AND created_at > NOW() - INTERVAL '${maxAgeDays} days'
            ORDER BY created_at DESC
@@ -308,7 +310,8 @@ export class BrandAnalysisRepository {
         const cutoffDate = new Date();
         cutoffDate.setDate(cutoffDate.getDate() - maxAgeDays);
 
-        const { data, error } = await supabase
+        // Search by brand_name first
+        let { data, error } = await supabase
           .from('brand_analyses')
           .select('*')
           .ilike('brand_name', normalizedBrand)
@@ -317,6 +320,22 @@ export class BrandAnalysisRepository {
           .order('created_at', { ascending: false })
           .limit(1)
           .single();
+
+        // If not found by brand_name, try input_brand
+        if (error && error.code === 'PGRST116') {
+          const result = await supabase
+            .from('brand_analyses')
+            .select('*')
+            .ilike('input_brand', normalizedBrand)
+            .eq('status', 'completed')
+            .gt('created_at', cutoffDate.toISOString())
+            .order('created_at', { ascending: false })
+            .limit(1)
+            .single();
+
+          data = result.data;
+          error = result.error;
+        }
 
         if (error) {
           if (error.code === 'PGRST116') {
@@ -493,6 +512,60 @@ export class BrandAnalysisRepository {
       return false;
     } catch (error) {
       logger.warn('Failed to delete analysis:', error);
+      return false;
+    }
+  }
+
+  /**
+   * Update brand_url for an existing analysis (used by async SerpAPI lookup)
+   */
+  async updateBrandUrl(id: string, brandUrl: string): Promise<boolean> {
+    if (!(await isDatabaseAvailable())) {
+      return false;
+    }
+
+    const mode = getDatabaseMode();
+
+    try {
+      if (mode === 'local') {
+        const pool = getPgPool();
+        if (!pool) return false;
+
+        const result = await pool.query(
+          `UPDATE brand_analyses
+           SET brand_url = $1, updated_at = NOW()
+           WHERE id = $2`,
+          [brandUrl, id]
+        );
+
+        if ((result.rowCount || 0) === 0) {
+          logger.warn(`Failed to update brand_url: Analysis ${id} not found`);
+          return false;
+        }
+
+        return true;
+      }
+
+      if (mode === 'supabase') {
+        const supabase = getSupabaseClient();
+        if (!supabase) return false;
+
+        const { error } = await supabase
+          .from('brand_analyses')
+          .update({ brand_url: brandUrl, updated_at: new Date().toISOString() })
+          .eq('id', id);
+
+        if (error) {
+          logger.warn('Failed to update brand_url:', error);
+          return false;
+        }
+
+        return true;
+      }
+
+      return false;
+    } catch (error) {
+      logger.warn('Failed to update brand_url:', error);
       return false;
     }
   }
